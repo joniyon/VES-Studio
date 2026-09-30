@@ -34,4 +34,40 @@ def test_invert_roundtrip():
 def test_bad_array_and_bad_inversion():
     assert c.post("/process", json={"array": "x", "rows": []}).status_code == 422
     r = c.post("/invert", json={"array": "wenner", "rows": [{"a": 1, "resistance": 1}] * 3})
-    assert "Schlumberger" in r.json()["error"]
+    assert "usable measurements" in r.json()["error"]
+
+
+def test_lithologies_and_suggest():
+    l = c.get("/lithologies").json()
+    assert any(x["id"] == "clay" for x in l["lithologies"]) and l["confidence_levels"] == ["low", "medium", "high"]
+    s = c.post("/suggest-lithology", json={"layers": [{"resistivity": 20, "depth_top": 2, "depth_bottom": 12},
+                                                      {"resistivity": 300, "depth_top": 12}]}).json()
+    assert len(s["layers"]) == 2 and len(s["layers"][0]) > 1 and "basis" in s["layers"][0][0]
+
+
+def test_exclusions_flow_through_api():
+    r = c.post("/process", json={"array": "schlumberger", "rows": ROWS, "excluded_rows": [2]}).json()
+    assert r["rows"][2]["qc_status"] == "EXCLUDED" and r["lineage"]["excluded_rows"] == [2]
+
+
+def test_figures_exports_report():
+    body = {"array": "schlumberger", "rows": ROWS, "config": {"n_layers": 3},
+            "interpretation": [{"lithology": "topsoil"}, {"lithology": "clay"}, {"lithology": "fresh_basement"}]}
+    assert c.post("/figures/curve", json=body).content[:4] == b"\x89PNG"
+    svg = c.post("/figures/column?fmt=svg", json=body)
+    assert svg.headers["content-type"] == "image/svg+xml" and b"<svg" in svg.content
+    assert "layer,resistivity_ohm_m" in c.post("/export/layers.csv", json=body).text
+    assert "apparent_resistivity" in c.post("/export/processed.csv", json=body).text
+    pdf = c.post("/report.pdf", json={**body, "project": {"name": "P"}, "station": {"id": "S1"}})
+    assert pdf.content[:5] == b"%PDF-"
+    assert "summary" in c.post("/draft-summary", json=body).json()
+
+
+def test_parse_xlsx(tmp_path):
+    from openpyxl import Workbook
+    wb = Workbook(); ws = wb.active; ws.title = "Field"
+    ws.append(["AB/2", "MN/2", "R"]); ws.append([1.5, 0.5, 12.0]); ws.append([3, 0.5, 5.6])
+    f = tmp_path / "d.xlsx"; wb.save(f)
+    r = c.post("/parse-xlsx", files={"file": ("d.xlsx", f.read_bytes())}).json()
+    assert r["headers"] == ["AB/2", "MN/2", "R"] and r["rows"][1] == ["3", "0.5", "5.6"] and r["sheets"] == ["Field"]
+    assert c.post("/parse-xlsx", files={"file": ("x.xlsx", b"not a workbook")}).status_code == 422

@@ -19,13 +19,15 @@ def default_start(spacing, observed, cfg: InversionConfig):
 class PygimliBackend:
     name = "pygimli"
 
-    def invert(self, spacing, mn_half, observed, cfg: InversionConfig) -> dict:
+    def invert(self, spacing, distances: dict, observed, cfg: InversionConfig) -> dict:
         import pygimli as pg
         from pygimli.physics.ves import VESModelling
 
         n = cfg.n_layers
         rho0, th0 = default_start(spacing, observed, cfg)
-        fop = VESModelling(ab2=spacing, mn2=mn_half, nLayers=n)
+        # arbitrary geometry via the four current-potential distances (inf = remote electrode)
+        fop = VESModelling(am=pg.Vector(distances["am"]), an=pg.Vector(distances["an"]),
+                           bm=pg.Vector(distances["bm"]), bn=pg.Vector(distances["bn"]), nLayers=n)
         inv = pg.Inversion(fop=fop, verbose=False)
         inv.transData = pg.trans.TransLog()
         start = pg.Vector(list(th0) + list(rho0))

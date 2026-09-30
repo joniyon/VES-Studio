@@ -38,7 +38,8 @@ def _fatal(msg, code, field_=None) -> ProcessedDataset:
     return ProcessedDataset(pd.DataFrame(), [Issue(Severity.ERROR, code, msg, None, field_)])
 
 
-def process_dataset(df: pd.DataFrame, array_name: str, units: dict | None = None) -> ProcessedDataset:
+def process_dataset(df: pd.DataFrame, array_name: str, units: dict | None = None,
+                    excluded_rows: set[int] | frozenset[int] | None = None) -> ProcessedDataset:
     units = {**DEFAULT_UNITS, **(units or {})}
     arr = get_array(array_name)
     geom_cols = list(arr.required_fields) + list(arr.integer_fields)
@@ -126,7 +127,9 @@ def process_dataset(df: pd.DataFrame, array_name: str, units: dict | None = None
     spacing = np.full(len(raw), np.nan)
     if ok.any():
         spacing[ok] = arr.spacing(**{c: si[c][ok] for c in geom_cols})
-    valid = np.flatnonzero(np.isfinite(rho_a) & (rho_a > 0) & np.isfinite(spacing))
+    excluded = set(excluded_rows or ())
+    not_excl = np.array([i not in excluded for i in range(len(raw))])
+    valid = np.flatnonzero(np.isfinite(rho_a) & (rho_a > 0) & np.isfinite(spacing) & not_excl)
     order = valid[np.argsort(spacing[valid], kind="stable")]
     for prev, cur in zip(order[:-1], order[1:]):
         ratio = rho_a[cur] / rho_a[prev]
@@ -144,6 +147,10 @@ def process_dataset(df: pd.DataFrame, array_name: str, units: dict | None = None
     out["geometric_factor"] = k
     out["apparent_resistivity"] = rho_a
     status = np.full(len(raw), "PASS", dtype=object)
+    for i in sorted(excluded):
+        if 0 <= i < len(raw):
+            issues.append(Issue(Severity.INFO, "USER_EXCLUDED",
+                                "Excluded from inversion by the user (value retained).", i))
     for iss in issues:
         if iss.row is None:
             continue
@@ -151,17 +158,23 @@ def process_dataset(df: pd.DataFrame, array_name: str, units: dict | None = None
             status[iss.row] = "ERROR"
         elif iss.severity is Severity.WARNING and status[iss.row] != "ERROR":
             status[iss.row] = "WARNING"
+    for i in excluded:
+        if 0 <= i < len(raw) and status[i] != "ERROR":
+            status[i] = "EXCLUDED"
     out["qc_status"] = status
 
     n_pass = int((status == "PASS").sum())
+    n_excl = int((status == "EXCLUDED").sum())
     issues.append(Issue(Severity.INFO, "SUMMARY",
-                        f"{n_pass} of {len(raw)} measurements passed validation."))
+                        f"{n_pass} of {len(raw)} measurements passed validation"
+                        + (f" ({n_excl} excluded by user)." if n_excl else ".")))
 
     lineage = {
         "engine_version": ENGINE_VERSION,
         "array": arr.name,
         "units": units,
         "columns_used": value_cols,
+        "excluded_rows": sorted(i for i in excluded if 0 <= i < len(raw)),
         "references": list(arr.references),
         "formula": "rho_a = K * (dV / I),  K from electrode geometry (see array.references)",
     }

@@ -34,3 +34,22 @@ def test_matches_pygimli_three_layer():
     rho, th = [100.0, 20.0, 300.0], [2.0, 10.0]
     ref = np.array(VESModelling(ab2=AB, mn2=np.full(len(AB), 1e-4)).response(pg.Vector(th + rho)))
     np.testing.assert_allclose(schlumberger_forward(AB, rho, th), ref, rtol=1e-4)
+
+
+def test_generic_layered_forward_matches_pygimli_all_arrays():
+    pg = pytest.importorskip("pygimli")
+    from pygimli.physics.ves import VESModelling
+    from app.arrays import get_array
+    from app.inversion.forward import layered_apparent_resistivity
+    rho, th = [100.0, 20.0, 300.0], [2.0, 10.0]
+    cases = {"wenner": dict(a=[2.0, 5.0, 10.0, 30.0]), "pole_pole": dict(a=[2.0, 10.0, 40.0]),
+             "dipole_dipole": dict(a=[5.0, 5.0, 10.0], n=[1.0, 3.0, 2.0]),
+             "pole_dipole": dict(a=[5.0, 5.0, 10.0], n=[1.0, 3.0, 2.0])}
+    for name, p in cases.items():
+        p = {k: np.array(v) for k, v in p.items()}
+        e = get_array(name).electrodes(**p)
+        d = lambda x, y: np.where(np.isinf(x) | np.isinf(y), np.inf, np.abs(x - y))
+        f = VESModelling(am=pg.Vector(d(e[0], e[2])), an=pg.Vector(d(e[0], e[3])),
+                         bm=pg.Vector(d(e[1], e[2])), bn=pg.Vector(d(e[1], e[3])), nLayers=3)
+        ref = np.array(f.response(pg.Vector(th + rho)))
+        np.testing.assert_allclose(layered_apparent_resistivity(*e, rho, th), ref, rtol=1e-5, err_msg=name)

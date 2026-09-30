@@ -70,10 +70,45 @@ def test_model_response_agrees_with_engine_forward(result, clean):
     np.testing.assert_allclose(ours, result.model_response, rtol=0.03)
 
 
-def test_rejects_non_schlumberger_and_too_little_data(clean):
-    wen = process_dataset(pd.DataFrame({"a": [1, 2, 4, 8], "resistance": [5, 4, 3, 2.5]}), "wenner")
-    with pytest.raises(InversionError, match="Schlumberger"):
-        invert_station(wen)
+def _synthetic(array, rho=(100.0, 20.0, 300.0), th=(2.0, 10.0), **p):
+    """Noise-free sounding for any array via the engine's independent layered forward model."""
+    from app.arrays import get_array
+    from app.inversion.forward import layered_apparent_resistivity
+    arr = get_array(array)
+    p = {k: np.asarray(v, float) for k, v in p.items()}
+    ra = layered_apparent_resistivity(*arr.electrodes(**p), rho, th)
+    df = pd.DataFrame({k: v for k, v in p.items()})
+    df["resistance"] = ra / arr.geometric_factor(**p)
+    return df
+
+
+@pytest.mark.parametrize("array,params", [
+    ("wenner", dict(a=np.geomspace(1, 60, 16))),
+    ("pole_pole", dict(a=np.geomspace(1, 80, 16))),
+    ("dipole_dipole", dict(a=np.repeat([2.0, 5.0, 10.0, 20.0], 4), n=np.tile([1, 2, 3, 4], 4))),
+])
+def test_inversion_all_array_types_recover_model(array, params):
+    df = _synthetic(array, **params)
+    res = invert_station(process_dataset(df, array), InversionConfig(n_layers=3, error_percent=2.0))
+    assert res.rms_percent < 2.0
+    np.testing.assert_allclose(res.resistivity[0], 100.0, rtol=0.2)
+    assert res.metadata["array"] == array
+    if array == "dipole_dipole":
+        assert any("lateral profiling" in w for w in res.warnings)
+
+
+def test_user_exclusion_removes_point_from_inversion(clean):
+    import pandas as pd
+    df = pd.read_csv(BENCH / "synthetic_schlumberger_3layer.csv")
+    base = invert_station(process_dataset(df, "schlumberger"), InversionConfig(n_layers=3))
+    excl = process_dataset(df, "schlumberger", excluded_rows={5})
+    assert excl.table.qc_status[5] == "EXCLUDED" and excl.lineage["excluded_rows"] == [5]
+    res = invert_station(excl, InversionConfig(n_layers=3))
+    assert res.metadata["n_data"] == base.metadata["n_data"] - 1 and 5 not in res.metadata["rows_used"]
+    assert res.run_id != base.run_id
+
+
+def test_rejects_too_little_data():
     few = process_dataset(pd.read_csv(BENCH / "synthetic_schlumberger_3layer.csv").head(4), "schlumberger")
     with pytest.raises(InversionError, match="usable measurements"):
         invert_station(few, InversionConfig(n_layers=3))

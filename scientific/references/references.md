@@ -9,6 +9,9 @@
 - Reynolds, J.M. (2011). *An Introduction to Applied and Environmental Geophysics*, 2nd ed. Wiley.
 - Kearey, P., Brooks, M., Hill, I. (2002). *An Introduction to Geophysical Exploration*, 3rd ed. Blackwell.
 
+- Keller, G.V., Frischknecht, F.C. (1966). *Electrical Methods in Geophysical Prospecting*. Pergamon. (Resistivity ranges.)
+- Federal Geographic Data Committee (2006). *FGDC Digital Cartographic Standard for Geologic Map Symbolization*, FGDC-STD-013-2006. (Reference for lithologic patterns; VES Studio patterns are conventional, not a formal implementation.)
+
 ## Papers / tutorials
 - Wenner, F. (1915). A method of measuring earth resistivity. *Bulletin of the Bureau of Standards*, 12(4).
 - Ghosh, D.P. (1971). The application of linear filter theory to the direct interpretation of geoelectrical resistivity sounding measurements. *Geophysical Prospecting*, 19, 192–217. (Layered-earth forward filter; inversion phase.)

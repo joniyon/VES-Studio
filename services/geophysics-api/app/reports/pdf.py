@@ -106,6 +106,7 @@ def build_report(*, project: dict, station: dict, processed, result, interpretat
              ("Assumptions", "MN/2 was not supplied; the point-electrode approximation (MN/2 = 0.1 % of AB/2) was used."
                              if processed.lineage.get("mn_half_assumed") else ""),
              ("Array references", "; ".join(arr.references)),
+             ("Data preparation", result.config.working.describe()),
              ("Inversion", f"Regularised least-squares (pyGIMLi {result.metadata.get('pygimli')}), {result.config.n_layers} layers, "
                            f"assumed data error {result.config.error_percent:g} %, λ = {result.config.lam:g}"),
              ("Engine / run", f"v{ENGINE_VERSION} · run {result.run_id}")])]
@@ -134,7 +135,9 @@ def build_report(*, project: dict, station: dict, processed, result, interpretat
                   f"{result.depth_top[i]:.4g}", "∞" if result.depth_bottom[i] in (None, float('inf')) else f"{result.depth_bottom[i]:.4g}"]
                  for i in range(len(result.resistivity))], [20 * mm, 30 * mm, 40 * mm, 35 * mm, 35 * mm]),
           Spacer(1, 4),
-          _kv([("RMS misfit", f"{result.rms_percent:.3g} %"), ("χ²", f"{result.chi2:.3g}"), ("Iterations", result.iterations),
+          _kv([("RMS misfit (fitted curve)", f"{result.rms_percent:.3g} %"),
+               ("RMS misfit (raw data)", f"{result.rms_raw_percent:.3g} %" if result.rms_raw_percent is not None else ""),
+               ("χ²", f"{result.chi2:.3g}"), ("Iterations", result.iterations),
                ("Converged (χ² ≤ 1)", "yes" if result.converged else "no")])]
 
     interp = interpretation or []

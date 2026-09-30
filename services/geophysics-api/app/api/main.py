@@ -12,8 +12,8 @@ from pydantic import BaseModel, Field
 from app import ENGINE_VERSION
 from app.arrays import REGISTRY, get_array
 from app.interpretation import CATALOGUE, CONFIDENCE_LEVELS, get_lithology, suggest
-from app.inversion import InversionConfig, InversionError, invert_station
-from app.processing import process_dataset
+from app.inversion import InversionConfig, InversionError, invert_station, prepare_working_curve
+from app.processing import WorkingCurveConfig, process_dataset
 from app.reports import (build_report, column_figure, curve_figure, draft_summary, layers_csv, legend_figure,
                          processed_csv)
 from app.units import CURRENT, DISTANCE, RESISTANCE, RESISTIVITY, VOLTAGE
@@ -56,6 +56,10 @@ class Dataset(BaseModel):
 
 class InvertRequest(Dataset):
     config: dict = Field(default_factory=dict)
+
+
+class WorkingCurveRequest(Dataset):
+    working: dict = Field(default_factory=dict)
 
 
 class FigureRequest(InvertRequest):
@@ -114,7 +118,10 @@ def _process(req: Dataset):
 
 
 def _config(req: InvertRequest) -> InversionConfig:
-    return InversionConfig(**{k: (tuple(v) if isinstance(v, list) else v) for k, v in req.config.items()})
+    cfg = {k: (tuple(v) if isinstance(v, list) else v) for k, v in req.config.items()}
+    if isinstance(cfg.get("working"), dict):
+        cfg["working"] = WorkingCurveConfig(**cfg["working"])
+    return InversionConfig(**cfg)
 
 
 def _run(req: InvertRequest):
@@ -233,3 +240,20 @@ def fig_legend(ids: str = "", fmt: str = "png"):
     for i in chosen:
         get_lithology(i)
     return Response(legend_figure(chosen, fmt), media_type=MEDIA.get(fmt, "image/png"))
+
+
+@app.post("/working-curve")
+def working_curve(req: WorkingCurveRequest):
+    """Preview the prepared (shifted / merged / smoothed) curve without inverting."""
+    processed = _process(req)
+    cfg = WorkingCurveConfig(**req.working)
+    try:
+        _, use, _, _, wc = prepare_working_curve(processed, cfg)
+    except InversionError as e:
+        return clean({"error": str(e)})
+    return clean({
+        "description": cfg.describe(), "identity": cfg.is_identity,
+        "spacing": wc.spacing, "values": wc.values, "shifts": wc.shifts, "n_segments": len(wc.shifts),
+        "segments": wc.segments, "notes": wc.notes, "source_rows": wc.source_rows,
+        "raw_rows": use.source_row.to_numpy(),
+    })

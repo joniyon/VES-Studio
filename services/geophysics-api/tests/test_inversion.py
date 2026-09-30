@@ -123,3 +123,73 @@ def test_inversion_from_apparent_resistivity_with_unknown_mn(clean):
                         InversionConfig(n_layers=3, error_percent=1.0))   # noise-free synthetic data
     np.testing.assert_allclose(res.resistivity, TRUE_RHO, rtol=0.05)
     np.testing.assert_allclose(res.thickness, TRUE_TH, rtol=0.10)
+
+
+def _segmented_sounding(offsets=(1.0, 0.8, 1.25, 0.9, 1.1, 0.7), spike_at=None):
+    from app.processing.working_curve import segment_ids
+    ab = np.array([1.5, 2, 3, 5, 6, 6, 8, 12, 15, 15, 25, 32, 40, 40, 50, 65, 80, 100, 100, 120, 150, 200, 200, 250.0])
+    from app.inversion.forward import schlumberger_forward
+    seg = segment_ids(ab)
+    rho_a = schlumberger_forward(ab, TRUE_RHO, TRUE_TH) * np.array(offsets)[seg]
+    if spike_at is not None:
+        rho_a[spike_at] *= 5.0
+    return pd.DataFrame({"ab_half": ab, "apparent_resistivity": rho_a})
+
+
+def test_working_curve_inversion_beats_raw_on_offset_segments_and_reports_both_misfits():
+    from app.processing import WorkingCurveConfig
+    p = process_dataset(_segmented_sounding(), "schlumberger", assume_point_mn=True)
+    raw = invert_station(p, InversionConfig(n_layers=3, error_percent=2.0))
+    shifted = invert_station(p, InversionConfig(n_layers=3, error_percent=2.0,
+                                                working=WorkingCurveConfig(overlap="shift")))
+    assert shifted.rms_raw_percent is not None and shifted.rms_percent < 1.0
+    assert shifted.rms_percent < raw.rms_percent                      # working curve is self-consistent
+    np.testing.assert_allclose(shifted.resistivity, TRUE_RHO, rtol=0.1)
+    np.testing.assert_allclose(shifted.thickness, TRUE_TH, rtol=0.15)
+    assert shifted.metadata["n_raw"] == 24 and shifted.metadata["n_data"] == 19
+    assert shifted.working["n_segments"] == 6 and len(shifted.working["shifts"]) == 6
+    assert any("working curve" in w for w in shifted.warnings)
+    assert raw.run_id != shifted.run_id and raw.working == {}
+
+
+def test_average_plus_median_is_more_robust_to_outliers_than_raw_fit():
+    """Measured property (see docs/science/working-curve.md): with isolated outliers, merging overlaps and
+    median smoothing recovers the model better than fitting the raw readings (median over seeds)."""
+    from app.processing import WorkingCurveConfig
+    from app.inversion.forward import schlumberger_forward
+    df0 = _segmented_sounding(offsets=(1.0,) * 6)
+    ab = df0.ab_half.to_numpy()
+    true = schlumberger_forward(ab, TRUE_RHO, TRUE_TH)
+    raw_err, sm_err = [], []
+    for seed in range(8):
+        rng = np.random.default_rng(seed)
+        y = true * np.exp(rng.normal(0, 0.05, len(ab)))
+        idx = rng.choice(len(ab), 3, replace=False)
+        y[idx] *= np.exp(rng.choice([-1, 1], 3) * np.log(4.0))
+        p = process_dataset(pd.DataFrame({"ab_half": ab, "apparent_resistivity": y}), "schlumberger", assume_point_mn=True)
+        err = lambda r: np.max(np.abs(np.log(r.resistivity / TRUE_RHO)))
+        raw_err.append(err(invert_station(p, InversionConfig(n_layers=3, error_percent=10.0))))
+        sm_err.append(err(invert_station(p, InversionConfig(
+            n_layers=3, error_percent=10.0, working=WorkingCurveConfig(overlap="average", smooth="median")))))
+    assert np.median(sm_err) < np.median(raw_err)
+
+
+def test_working_curve_runs_are_reproducible_and_config_sensitive():
+    from app.processing import WorkingCurveConfig
+    p = process_dataset(_segmented_sounding(), "schlumberger", assume_point_mn=True)
+    mk = lambda **w: invert_station(p, InversionConfig(n_layers=3, working=WorkingCurveConfig(**w)))
+    a, b = mk(overlap="shift"), mk(overlap="shift")
+    assert a.run_id == b.run_id
+    np.testing.assert_array_equal(a.resistivity, b.resistivity)
+    assert mk(overlap="shift", smooth="median").run_id != a.run_id
+
+
+def test_working_curve_rejected_for_profiling_arrays_and_too_few_points():
+    from app.processing import WorkingCurveConfig
+    dd = process_dataset(pd.DataFrame({"a": np.repeat([2.0, 5.0, 10.0, 20.0], 4), "n": np.tile([1, 2, 3, 4], 4),
+                                        "apparent_resistivity": np.linspace(10, 40, 16)}), "dipole_dipole")
+    with pytest.raises(InversionError, match="soundings only"):
+        invert_station(dd, InversionConfig(n_layers=3, working=WorkingCurveConfig(overlap="average")))
+    few = process_dataset(_segmented_sounding().head(8), "schlumberger", assume_point_mn=True)
+    with pytest.raises(InversionError):
+        invert_station(few, InversionConfig(n_layers=5, working=WorkingCurveConfig(smooth="median")))

@@ -3,6 +3,8 @@ from typing import Protocol
 
 import numpy as np
 
+from app.processing.working_curve import WorkingCurveConfig
+
 
 @dataclass(frozen=True)
 class InversionConfig:
@@ -15,6 +17,7 @@ class InversionConfig:
     thickness_bounds: tuple[float, float] = (0.1, 1e3)  # m
     start_rho: tuple[float, ...] | None = None        # length n_layers, else data median
     start_thickness: tuple[float, ...] | None = None  # length n_layers-1, else log-spaced
+    working: WorkingCurveConfig = field(default_factory=WorkingCurveConfig)   # data preparation (recorded)
 
 
 @dataclass
@@ -37,6 +40,10 @@ class InversionResult:
         "A good fit does not prove the geological model: VES inversion is non-unique "
         "(equivalence) and has limited resolution.",
     )
+    raw_spacing: np.ndarray = field(default_factory=lambda: np.array([]))    # usable raw points
+    raw_observed: np.ndarray = field(default_factory=lambda: np.array([]))
+    rms_raw_percent: float | None = None     # misfit of the model against the RAW data
+    working: dict = field(default_factory=dict)   # shifts, segments, description (empty when raw data were fitted)
 
 
 class InversionBackend(Protocol):

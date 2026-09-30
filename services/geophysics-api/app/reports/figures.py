@@ -43,6 +43,9 @@ def curve_figure(table, result=None, fmt: str = "png", title: str | None = None)
             ax.scatter(d[key], d.apparent_resistivity, c=color, marker=marker, s=26,
                        label={"PASS": "observed", "WARNING": "observed (warning)",
                               "EXCLUDED": "excluded by user"}[status], zorder=3)
+    if result is not None and result.working:
+        ax.plot(result.spacing, result.observed, color="#6b7280", lw=1.0, marker="s", ms=4, mfc="none",
+                label="working curve (fitted)", zorder=2)
     if result is not None:
         ax.plot(result.spacing, result.model_response, color="#059669", lw=1.8, label="model response", zorder=2)
     ax.set_xscale("log"); ax.set_yscale("log")

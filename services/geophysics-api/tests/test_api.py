@@ -77,3 +77,20 @@ def test_legend_endpoint():
     assert c.get("/figures/legend?ids=sand,clay").content[:4] == b"\x89PNG"
     assert c.get("/figures/legend").status_code == 200
     assert c.get("/figures/legend?ids=nope").status_code == 422
+
+
+def test_working_curve_preview_and_inversion_with_working_config():
+    rows = [{"ab_half": a, "apparent_resistivity": r} for a, r in
+            [(1.5, 94), (2, 89), (3, 75), (5, 48), (6, 40), (6, 35), (8, 30), (12, 28), (15, 29), (15, 27), (25, 32),
+             (32, 38), (40, 45), (40, 41), (50, 55), (65, 70), (80, 88), (100, 110), (100, 100), (120, 115)]]
+    body = {"array": "schlumberger", "rows": rows, "assume_point_mn": True}
+    w = c.post("/working-curve", json={**body, "working": {"overlap": "shift", "smooth": "median", "window": 3}}).json()
+    assert len(w["spacing"]) == 16 and w["n_segments"] >= 3 and w["identity"] is False and "shifted" in w["description"]
+    r = c.post("/invert", json={**body, "config": {"n_layers": 3, "working": {"overlap": "average"}}}).json()
+    assert "rms_raw_percent" in r and r["working"]["n_segments"] == 1 and r["config"]["working"]["overlap"] == "average"
+    bad = c.post("/working-curve", json={"array": "wenner", "rows": [{"a": 1, "apparent_resistivity": 5}] * 3,
+                                         "working": {"overlap": "nope"}})
+    assert bad.status_code == 422
+    dd = c.post("/working-curve", json={"array": "dipole_dipole", "working": {"overlap": "average"},
+                                        "rows": [{"a": 5, "n": n, "apparent_resistivity": 10.0} for n in (1, 2, 3)]}).json()
+    assert "soundings only" in dd["error"]

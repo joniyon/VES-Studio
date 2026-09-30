@@ -71,3 +71,9 @@ def test_parse_xlsx(tmp_path):
     r = c.post("/parse-xlsx", files={"file": ("d.xlsx", f.read_bytes())}).json()
     assert r["headers"] == ["AB/2", "MN/2", "R"] and r["rows"][1] == ["3", "0.5", "5.6"] and r["sheets"] == ["Field"]
     assert c.post("/parse-xlsx", files={"file": ("x.xlsx", b"not a workbook")}).status_code == 422
+
+
+def test_legend_endpoint():
+    assert c.get("/figures/legend?ids=sand,clay").content[:4] == b"\x89PNG"
+    assert c.get("/figures/legend").status_code == 200
+    assert c.get("/figures/legend?ids=nope").status_code == 422

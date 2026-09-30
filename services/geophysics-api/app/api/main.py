@@ -11,10 +11,11 @@ from pydantic import BaseModel, Field
 
 from app import ENGINE_VERSION
 from app.arrays import REGISTRY, get_array
-from app.interpretation import CATALOGUE, CONFIDENCE_LEVELS, suggest
+from app.interpretation import CATALOGUE, CONFIDENCE_LEVELS, get_lithology, suggest
 from app.inversion import InversionConfig, InversionError, invert_station
 from app.processing import process_dataset
-from app.reports import build_report, column_figure, curve_figure, draft_summary, layers_csv, processed_csv
+from app.reports import (build_report, column_figure, curve_figure, draft_summary, layers_csv, legend_figure,
+                         processed_csv)
 from app.units import CURRENT, DISTANCE, RESISTANCE, VOLTAGE
 
 app = FastAPI(title="VES Studio geophysics API", version=ENGINE_VERSION)
@@ -221,3 +222,12 @@ def report(req: ReportRequest):
 def draft(req: FigureRequest):
     processed, r = _run(req)
     return {"summary": draft_summary(processed, r, req.interpretation)}
+
+
+@app.get("/figures/legend")
+def fig_legend(ids: str = "", fmt: str = "png"):
+    """Lithology legend; `ids` is a comma-separated list (default: the whole catalogue)."""
+    chosen = [i for i in ids.split(",") if i] or [l.id for l in CATALOGUE]
+    for i in chosen:
+        get_lithology(i)
+    return Response(legend_figure(chosen, fmt), media_type=MEDIA.get(fmt, "image/png"))

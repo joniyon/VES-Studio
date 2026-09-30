@@ -22,7 +22,7 @@ export function CurveChart({
   if (!key) return null;
   const valid = rows.filter((r) => r.apparent_resistivity != null && (r.apparent_resistivity as number) > 0);
   const pick = (status: string[]) => valid.filter((r) => status.includes(r.qc_status));
-  const trace = (rs: ProcessedRow[], name: string, color: string, symbol: "circle" | "diamond") => ({
+  const trace = (rs: ProcessedRow[], name: string, color: string, symbol: "circle" | "diamond" | "x") => ({
     x: rs.map((r) => r[key] as number),
     y: rs.map((r) => r.apparent_resistivity as number),
     customdata: rs.map((r) => r.source_row) as unknown as never,
@@ -33,6 +33,7 @@ export function CurveChart({
   const data = [
     trace(pick(["PASS"]), "observed", t.series[0], "circle"),
     trace(pick(["WARNING"]), "observed (warning)", t.series[1], "diamond"),
+    trace(pick(["EXCLUDED"]), "excluded by user", t.muted, "x"),
     ...(model
       ? [{
           x: model.spacing, y: model.model_response, name: "model response",

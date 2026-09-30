@@ -112,3 +112,14 @@ def test_rejects_too_little_data():
     few = process_dataset(pd.read_csv(BENCH / "synthetic_schlumberger_3layer.csv").head(4), "schlumberger")
     with pytest.raises(InversionError, match="usable measurements"):
         invert_station(few, InversionConfig(n_layers=3))
+
+
+def test_inversion_from_apparent_resistivity_with_unknown_mn(clean):
+    """Real-data path: only AB/2 and rho_a supplied, MN/2 assumed point-electrode."""
+    from app.inversion.forward import schlumberger_forward
+    ab = np.array([1.5, 2, 3, 5, 7, 10, 15, 20, 30, 50, 70, 100, 150, 200.0])
+    df = pd.DataFrame({"ab_half": ab, "apparent_resistivity": schlumberger_forward(ab, TRUE_RHO, TRUE_TH)})
+    res = invert_station(process_dataset(df, "schlumberger", assume_point_mn=True),
+                        InversionConfig(n_layers=3, error_percent=1.0))   # noise-free synthetic data
+    np.testing.assert_allclose(res.resistivity, TRUE_RHO, rtol=0.05)
+    np.testing.assert_allclose(res.thickness, TRUE_TH, rtol=0.10)

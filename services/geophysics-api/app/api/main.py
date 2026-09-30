@@ -16,7 +16,7 @@ from app.inversion import InversionConfig, InversionError, invert_station
 from app.processing import process_dataset
 from app.reports import (build_report, column_figure, curve_figure, draft_summary, layers_csv, legend_figure,
                          processed_csv)
-from app.units import CURRENT, DISTANCE, RESISTANCE, VOLTAGE
+from app.units import CURRENT, DISTANCE, RESISTANCE, RESISTIVITY, VOLTAGE
 
 app = FastAPI(title="VES Studio geophysics API", version=ENGINE_VERSION)
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -51,6 +51,7 @@ class Dataset(BaseModel):
     units: dict[str, str] = Field(default_factory=dict)
     rows: list[dict]
     excluded_rows: list[int] = Field(default_factory=list)
+    assume_point_mn: bool = False
 
 
 class InvertRequest(Dataset):
@@ -102,13 +103,14 @@ def arrays():
             for k, a in REGISTRY.items()
         ],
         "units": {"distance": list(DISTANCE), "resistance": list(RESISTANCE),
-                  "voltage": list(VOLTAGE), "current": list(CURRENT)},
+                  "voltage": list(VOLTAGE), "current": list(CURRENT),
+                  "resistivity": list(RESISTIVITY)},
     }
 
 
 def _process(req: Dataset):
     get_array(req.array)  # raises ValueError -> 422
-    return process_dataset(pd.DataFrame(req.rows), req.array, req.units, set(req.excluded_rows))
+    return process_dataset(pd.DataFrame(req.rows), req.array, req.units, set(req.excluded_rows), req.assume_point_mn)
 
 
 def _config(req: InvertRequest) -> InversionConfig:

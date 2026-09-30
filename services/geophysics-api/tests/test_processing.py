@@ -119,3 +119,35 @@ def test_benchmark_dataset_roundtrip():
     assert not res.has_errors
     expected = schlumberger_forward(df.ab_half, [100, 20, 300], [2, 10])
     np.testing.assert_allclose(res.table.apparent_resistivity, expected, rtol=1e-6)
+
+
+def test_apparent_resistivity_input():
+    df = pd.DataFrame({"ab_half": [10.0, 20.0], "mn_half": [1.0, 1.0], "apparent_resistivity": [50.0, 60.0]})
+    res = process_dataset(df, "schlumberger")
+    assert not res.has_errors
+    np.testing.assert_allclose(res.table.apparent_resistivity, [50.0, 60.0])
+    K = np.pi * (10**2 - 1) / 2
+    assert res.table.geometric_factor[0] == pytest.approx(K) and res.table.resistance_ohm[0] == pytest.approx(50 / K)
+    assert res.lineage["measurement"] == "apparent_resistivity"
+    kohm = process_dataset(df.assign(apparent_resistivity=[0.05, 0.06]), "schlumberger", {"resistivity": "kohm-m"})
+    np.testing.assert_allclose(kohm.table.apparent_resistivity, [50.0, 60.0])
+
+
+def test_unknown_mn_requires_explicit_flag_and_is_recorded():
+    df = pd.DataFrame({"ab_half": [10.0, 20.0, 40.0], "apparent_resistivity": [50.0, 55.0, 60.0]})
+    assert codes(process_dataset(df, "schlumberger")) == ["MISSING_COLUMN"]
+    res = process_dataset(df, "schlumberger", assume_point_mn=True)
+    assert not res.has_errors and "MN_ASSUMED" in codes(res, Severity.WARNING)
+    assert res.lineage["mn_half_assumed"] is True
+    assert res.table.geometric_factor.isna().all() and res.table.resistance_ohm.isna().all()
+    np.testing.assert_allclose(res.table.apparent_resistivity, [50.0, 55.0, 60.0])
+    np.testing.assert_allclose(res.table.mn_half_m, df.ab_half * 1e-3)
+    # flag is ignored when MN/2 is actually supplied, and for other arrays
+    with_mn = process_dataset(df.assign(mn_half=1.0), "schlumberger", assume_point_mn=True)
+    assert "MN_ASSUMED" not in codes(with_mn) and with_mn.lineage["mn_half_assumed"] is False
+
+
+def test_bad_apparent_resistivity_values():
+    df = pd.DataFrame({"a": [1.0, 2.0, 3.0], "apparent_resistivity": [10.0, 0.0, -5.0]})
+    res = process_dataset(df, "wenner")
+    assert "RESISTANCE_ZERO" in codes(res, Severity.ERROR) and "RESISTANCE_NEGATIVE" in codes(res, Severity.WARNING)

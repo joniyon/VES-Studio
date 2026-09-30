@@ -5,12 +5,14 @@ DISTANCE = {"m": 1.0, "cm": 0.01, "km": 1000.0}
 RESISTANCE = {"ohm": 1.0, "mohm": 1e-3, "kohm": 1e3}
 VOLTAGE = {"V": 1.0, "mV": 1e-3}
 CURRENT = {"A": 1.0, "mA": 1e-3}
+RESISTIVITY = {"ohm-m": 1.0, "kohm-m": 1e3}
 
 _TABLES = {
     "distance": DISTANCE,
     "resistance": RESISTANCE,
     "voltage": VOLTAGE,
     "current": CURRENT,
+    "resistivity": RESISTIVITY,
 }
 
 

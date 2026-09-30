@@ -13,3 +13,10 @@ Next: published-example validation, FastAPI layer (app/api), then Phase 2 founda
     /opt/homebrew/bin/python3.12 -m venv .venv
     .venv/bin/pip install numpy pandas scipy openpyxl pytest pygimli
     DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/opt/lapack/lib .venv/bin/python -m pytest -q
+
+## Run the app
+    # API (port 8000)
+    cd services/geophysics-api
+    DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/opt/lapack/lib .venv/bin/python -m uvicorn app.api.main:app --port 8000
+    # Web (port 3000) — Next.js + shadcn/ui + Geist Mono
+    cd apps/web && npm install && npm run dev

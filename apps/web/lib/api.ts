@@ -37,7 +37,13 @@ export type LithologyResponse = { lithologies: Lithology[]; confidence_levels: s
 export type Suggestion = { id: string; name: string; in_range: boolean; depth_ok: boolean; score: number; basis: string };
 export type LayerInterp = { lithology: string; confidence: string; basis: string; notes: string };
 
-export type InversionConfig = { n_layers: number; error_percent: number; lam?: number; max_iter?: number };
+export type WorkingConfig = { overlap: "none" | "average" | "shift"; anchor_segment: number; smooth: "none" | "median" | "hanning"; window: 3 | 5 };
+export const NO_WORKING: WorkingConfig = { overlap: "none", anchor_segment: 0, smooth: "none", window: 3 };
+export type WorkingPreview = {
+  description: string; identity: boolean; spacing: number[]; values: number[]; shifts: number[]; n_segments: number;
+  notes: string[]; error?: string;
+};
+export type InversionConfig = { n_layers: number; error_percent: number; lam?: number; max_iter?: number; working?: WorkingConfig };
 export type InversionResult = {
   run_id: string;
   config: InversionConfig;
@@ -49,6 +55,10 @@ export type InversionResult = {
   observed: number[];
   model_response: number[];
   rms_percent: number;
+  rms_raw_percent: number | null;
+  raw_spacing: number[];
+  raw_observed: number[];
+  working: { description?: string; shifts?: number[]; notes?: string[]; n_segments?: number };
   chi2: number;
   iterations: number;
   converged: boolean;
@@ -112,6 +122,8 @@ export async function fetchBlob(path: string, payload?: unknown): Promise<Blob> 
 export type Payload = {
   array: string; units: Units; rows: Record<string, unknown>[]; excluded_rows: number[]; assume_point_mn: boolean;
 };
+export const workingCurve = (p: Payload & { working: WorkingConfig }) =>
+  post("/working-curve", p) as Promise<WorkingPreview>;
 export const processData = (p: Payload) =>
   post("/process", p) as Promise<ProcessResponse>;
 export const invert = (p: Payload & { config: InversionConfig }) =>

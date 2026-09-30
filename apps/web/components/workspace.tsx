@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, CheckCircle2, FlaskConical, Info, Loader2, Undo2, Upload, XCircle } from "lucide-react";
 import {
-  fetchBlob, getArrays, getLithologies, invert, parseXlsx, processData, suggestLithology,
+  NO_WORKING, fetchBlob, getArrays, getLithologies, invert, parseXlsx, processData, suggestLithology, workingCurve,
   type ArrayMeta, type ArraysResponse, type InversionConfig, type InversionResult, type Issue,
   type LayerInterp, type LithologyResponse, type Payload, type ProcessResponse, type ProcessedRow,
-  type Suggestion, type Units,
+  type Suggestion, type Units, type WorkingConfig, type WorkingPreview,
 } from "@/lib/api";
 import {
   EMPTY_PROJECT, EMPTY_STATION, clearSaved, download, loadSaved, parseProjectFile, save, sha256Hex, slug, toBase64,
@@ -29,6 +29,7 @@ import { ExportPanel, type ExportAction } from "./export-panel";
 import { BLANK, InterpretationPanel } from "./interpretation-panel";
 import { LayerProfile } from "./layer-profile";
 import { Pick } from "./pick";
+import { WorkingCurveCard } from "./working-curve-card";
 import { ProjectPanel } from "./project-panel";
 import { ThemeToggle } from "./theme-toggle";
 
@@ -76,6 +77,8 @@ export function Workspace() {
   const inFlight = useRef(false);
   const setRuns = useCallback((next: RunRecord[]) => { runsRef.current = next; setRunsState(next); }, []);
   const [activeRun, setActiveRun] = useState<number | null>(null);
+  const [working, setWorking] = useState<WorkingConfig>(NO_WORKING);
+  const [wPreview, setWPreview] = useState<WorkingPreview | null>(null);
   const [nLayers, setNLayers] = useState("3");
   const [errPct, setErrPct] = useState("3");
   const [interpretation, setInterpretation] = useState<Record<string, LayerInterp[]>>({});
@@ -120,6 +123,20 @@ export function Workspace() {
     const cur = interpretation[run.result.run_id] ?? [];
     return run.result.resistivity.map((_, i) => cur[i] ?? BLANK);
   }, [run, interpretation]);
+
+  const soundingArray = arrayId === "schlumberger" || arrayId === "wenner" || arrayId === "pole_pole";
+  useEffect(() => {
+    if (!processed || !soundingArray || working.overlap === "none" && working.smooth === "none") return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      workingCurve({ ...payload(), working })
+        .then((w) => { if (!cancelled) setWPreview(w); })
+        .catch((e: Error) => { if (!cancelled) setWPreview({ error: e.message } as WorkingPreview); });
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [processed, working, soundingArray, excluded, mapping]);
+  const previewShown = processed && soundingArray && !(working.overlap === "none" && working.smooth === "none") ? wPreview : null;
 
   // ------------------------------------------------------------------ data loading
   const resetResults = useCallback(() => {
@@ -210,7 +227,7 @@ export function Workspace() {
     inFlight.current = true;
     setBusy("invert"); setError(null);
     try {
-      const config: InversionConfig = { n_layers: Number(nLayers), error_percent: Number(errPct) };
+      const config: InversionConfig = { n_layers: Number(nLayers), error_percent: Number(errPct), working: soundingArray ? working : NO_WORKING };
       const res = await invert({ ...payload(), config });
       const cur = runsRef.current;           // authoritative list (not a stale render closure)
       const existing = cur.findIndex((r) => r.result.run_id === res.run_id);
@@ -222,7 +239,7 @@ export function Workspace() {
         setRuns(next);
         setActiveRun(next.length - 1);
         setNotice(null);
-        log(`Inversion run ${next.length}: ${res.config.n_layers} layers, error ${res.config.error_percent}%, RMS ${res.rms_percent.toFixed(2)}%, run ${res.run_id}`);
+        log(`Inversion run ${next.length}: ${res.config.n_layers} layers, error ${res.config.error_percent}%, ${res.working.description ? `prepared (${res.working.description}), ` : "raw data, "}RMS ${res.rms_percent.toFixed(2)}%${res.rms_raw_percent != null && res.working.description ? ` (raw ${res.rms_raw_percent.toFixed(1)}%)` : ""}, run ${res.run_id}`);
       }
     } catch (e) { setError((e as Error).message); }
     finally { inFlight.current = false; setBusy(null); }
@@ -284,14 +301,15 @@ export function Workspace() {
   // ------------------------------------------------------------------ persistence
   const snapshot = useCallback((): SavedState => ({
     format: "ves-studio-project", version: 1, saved_at: now(), project, station, upload, arrayId, units, useVI: measurement === "vi", measurement, assumeMn, mapping,
-    excluded, runs: runs.map((r) => ({ config: r.result.config, excluded: r.excluded })), activeRun, interpretation,
+    excluded, working, runs: runs.map((r) => ({ config: r.result.config, excluded: r.excluded })), activeRun, interpretation,
     geologicalContext: context, conclusion, history,
-  }), [project, station, upload, arrayId, units, measurement, assumeMn, mapping, excluded, runs, activeRun, interpretation, context, conclusion, history]);
+  }), [project, station, upload, arrayId, units, measurement, assumeMn, mapping, excluded, working, runs, activeRun, interpretation, context, conclusion, history]);
 
   const applyState = useCallback(async (s: SavedState, from: "session" | "file") => {
     setProject(s.project); setStation(s.station); setUpload(s.upload); setArrayId(s.arrayId);
     const mode: Measurement = s.measurement ?? (s.useVI ? "vi" : "r");
     setMeasurement(mode); setAssumeMn(!!s.assumeMn); setUnits({ ...DEFAULT_UNITS, ...s.units }); setMapping(s.mapping); setExcluded(s.excluded); setInterpretation(s.interpretation);
+    setWorking(s.working ?? NO_WORKING); setWPreview(null);
     setContext(s.geologicalContext); setConclusion(s.conclusion); setHistory(s.history);
     setSheets([]); fileRef.current = null;
     resetResults();
@@ -338,7 +356,7 @@ export function Workspace() {
     clearSaved();
     setProject(EMPTY_PROJECT); setStation(EMPTY_STATION); setUpload(null); setExcluded([]); setMapping({});
     setInterpretation({}); setContext(""); setConclusion(""); setHistory([]); setSheets([]); fileRef.current = null;
-    setUnits(DEFAULT_UNITS); setMeasurement("r"); setAssumeMn(false); resetResults(); setError(null); setTab("project");
+    setUnits(DEFAULT_UNITS); setMeasurement("r"); setAssumeMn(false); setWorking(NO_WORKING); setWPreview(null); resetResults(); setError(null); setTab("project");
   };
 
   // ------------------------------------------------------------------ exports
@@ -630,7 +648,7 @@ export function Workspace() {
               <CardDescription>Log-log. Click a point to inspect it; zoom and pan with the toolbar.</CardDescription>
             </CardHeader>
             <CardContent className="h-[440px]">
-              <CurveChart rows={rows} model={r0} selected={selected} onSelect={setSelected} />
+              <CurveChart rows={rows} model={r0} selected={selected} onSelect={setSelected} working={previewShown && !previewShown.error ? previewShown : null} />
             </CardContent>
           </Card>
           <Card>
@@ -668,6 +686,7 @@ export function Workspace() {
 
         {/* ---------------- 4 · INVERSION ---------------- */}
         <TabsContent value="inversion" className="mt-4 grid gap-4">
+          <WorkingCurveCard value={working} onChange={setWorking} preview={previewShown} available={soundingArray} />
           <Card>
             <CardHeader>
               <CardTitle>1D inversion</CardTitle>
@@ -676,7 +695,7 @@ export function Workspace() {
             <CardContent className="flex flex-wrap items-end gap-4">
               <div className="grid gap-2">
                 <Label>Layers</Label>
-                <Pick label="Number of layers" value={nLayers} onChange={setNLayers} className="w-24" options={[2, 3, 4, 5].map((n) => ({ value: String(n), label: String(n) }))} />
+                <Pick label="Number of layers" value={nLayers} onChange={setNLayers} className="w-24" options={[2, 3, 4, 5, 6, 7].map((n) => ({ value: String(n), label: String(n) }))} />
               </div>
               <div className="grid gap-2">
                 <Label>Assumed data error (%)</Label>
@@ -694,7 +713,7 @@ export function Workspace() {
             <div className="flex flex-wrap gap-2">
               {runs.map((r, i) => (
                 <Button key={`${i}-${r.result.run_id}`} size="sm" variant={i === activeRun ? "default" : "outline"} onClick={() => setActiveRun(i)}>
-                  Run {i + 1} · {r.result.config.n_layers} layers · RMS {fmt(r.result.rms_percent, 3)}%
+                  Run {i + 1} · {r.result.config.n_layers} layers · {r.result.working.description ? "prepared · " : ""}RMS {fmt(r.result.rms_percent, 3)}%
                 </Button>
               ))}
             </div>
@@ -709,7 +728,7 @@ export function Workspace() {
               <div className="grid gap-4 lg:grid-cols-2">
                 <Card>
                   <CardHeader><CardTitle>Observed vs model</CardTitle></CardHeader>
-                  <CardContent className="h-80"><CurveChart rows={rows} model={r0} selected={selected} onSelect={setSelected} /></CardContent>
+                  <CardContent className="h-80"><CurveChart rows={rows} model={r0} selected={selected} onSelect={setSelected} working={previewShown && !previewShown.error ? previewShown : null} /></CardContent>
                 </Card>
                 <Card>
                   <CardHeader><CardTitle>Layer model</CardTitle></CardHeader>
@@ -743,7 +762,9 @@ export function Workspace() {
                   <CardHeader><CardTitle>Fit quality</CardTitle></CardHeader>
                   <CardContent className="grid gap-2 text-sm">
                     <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
-                      <dt className="text-muted-foreground">RMS</dt><dd className="text-right tabular-nums">{fmt(r0.rms_percent, 3)} %</dd>
+                      <dt className="text-muted-foreground">RMS (fitted curve)</dt><dd className="text-right tabular-nums">{fmt(r0.rms_percent, 3)} %</dd>
+                      {r0.working.description && (<><dt className="text-muted-foreground">RMS (raw data)</dt><dd className="text-right tabular-nums">{fmt(r0.rms_raw_percent, 3)} %</dd></>)}
+                      <dt className="text-muted-foreground">Points fitted</dt><dd className="text-right tabular-nums">{String(r0.metadata.n_data)} of {String(r0.metadata.n_raw)}</dd>
                       <dt className="text-muted-foreground">χ²</dt><dd className="text-right tabular-nums">{fmt(r0.chi2, 3)}</dd>
                       <dt className="text-muted-foreground">Iterations</dt><dd className="text-right tabular-nums">{r0.iterations}</dd>
                       <dt className="text-muted-foreground">Converged</dt><dd className="text-right">{r0.converged ? "yes (χ² ≤ 1)" : "no (χ² > 1)"}</dd>

@@ -24,6 +24,8 @@ Checked against section 36 of the scope. "Evidence" points to the test or UI fea
 | **Real VES dataset upload → report** | **Partly verified** | Ayetoro field file (6 soundings, apparent resistivity, no MN/2) ran upload → QC → inversion → PDF/CSV export. Results are data-limited (noisy, RMS 18–44 %); not yet reviewed by a geophysicist or compared with other software |
 
 ## Also delivered
+Working curve (segment shift, overlap averaging, median/Hanning smoothing) with misfit reported on both the fitted and the raw data; see `docs/science/working-curve.md` for measured behaviour and the WinResist comparison.
+
 Project and station metadata (with coordinate validation), processing history, autosave, project-file save/open
 (keeps the original upload), lithology interpretation with ranked suggestions and user-set confidence,
 geological context, draft conclusion.

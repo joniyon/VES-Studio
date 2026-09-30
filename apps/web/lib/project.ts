@@ -1,4 +1,4 @@
-import type { InversionConfig, LayerInterp, Units } from "./api";
+import type { InversionConfig, LayerInterp, Units, WorkingConfig } from "./api";
 import type { Mapping, RawTable } from "./table";
 
 export type ProjectMeta = {
@@ -30,6 +30,7 @@ export type SavedState = {
   assumeMn?: boolean;
   mapping: Mapping;
   excluded: number[];
+  working?: WorkingConfig;
   runs: { config: InversionConfig; excluded: number[] }[];
   activeRun: number | null;
   interpretation: Record<string, LayerInterp[]>;   // keyed by run_id

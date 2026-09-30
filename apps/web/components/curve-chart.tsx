@@ -10,10 +10,11 @@ export function spacingKey(rows: ProcessedRow[]): string | null {
 }
 
 export function CurveChart({
-  rows, model, selected, onSelect,
+  rows, model, selected, onSelect, working,
 }: {
   rows: ProcessedRow[];
   model: InversionResult | null;
+  working?: { spacing: number[]; values: number[] } | null;
   selected: number | null;
   onSelect: (sourceRow: number) => void;
 }) {
@@ -34,6 +35,15 @@ export function CurveChart({
     trace(pick(["PASS"]), "observed", t.series[0], "circle"),
     trace(pick(["WARNING"]), "observed (warning)", t.series[1], "diamond"),
     trace(pick(["EXCLUDED"]), "excluded by user", t.muted, "x"),
+    ...(() => {
+      // prepared curve: the fitted one when a prepared run is shown, else the live preview
+      const w = model && model.working && model.working.description ? { spacing: model.spacing, values: model.observed } : working;
+      return w && w.spacing.length
+        ? [{ x: w.spacing, y: w.values, name: "working curve", type: "scatter" as const, mode: "lines+markers" as const,
+             marker: { color: t.muted, symbol: "square-open" as const, size: 7 }, line: { color: t.muted, width: 1, dash: "dot" as const },
+             hovertemplate: "working ρa %{y:.4g} Ωm<extra></extra>" }]
+        : [];
+    })(),
     ...(model
       ? [{
           x: model.spacing, y: model.model_response, name: "model response",

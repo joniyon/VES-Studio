@@ -24,9 +24,3 @@ the processing history and the PDF; the result reports the misfit against **both
 **Guidance:** for erratic field data, *average overlaps + median smoothing* is the most robust. Use *shift* only when the
 offsets look systematic (e.g. every second reading lower by a similar factor) — not to tidy up scatter. Smoothing trades a
 little accuracy on clean data for robustness to bad readings.
-
-## Relation to WinResist
-WinResist reports "RMS on smoothed data" and fits a smoothed curve. Its exact smoothing algorithm is not documented here, so
-results will not match number-for-number. Independent checks that do hold: for WinResist's published VES 1 layer model, this
-engine's forward model and pyGIMLi agree to ~6e-8; for VES 2 the top layer (8.8 Ωm, 1.4 m) and the conductive layer
-(~0.6–0.7 Ωm, ~2–12 m) agree closely; deeper layers differ (poorly resolved with noisy data).

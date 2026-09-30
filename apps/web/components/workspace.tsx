@@ -13,9 +13,10 @@ import {
   validateStation, type HistoryEvent, type ProjectMeta, type SavedState, type StationMeta, type UploadInfo,
 } from "@/lib/project";
 import { SAMPLE_CSV } from "@/lib/sample";
-import { autoMap, buildRows, parseCsv, targetFields, type Mapping } from "@/lib/table";
+import { autoMap, buildRows, parseCsv, targetFields, type Mapping, type Measurement } from "@/lib/table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -34,8 +35,11 @@ import { ThemeToggle } from "./theme-toggle";
 const fmt = (v: unknown, d = 4) =>
   typeof v === "number" ? (Math.abs(v) >= 1e4 || (v !== 0 && Math.abs(v) < 1e-2) ? v.toExponential(3) : Number(v.toPrecision(d)).toString()) : "—";
 
-const DEFAULT_UNITS: Units = { distance: "m", resistance: "ohm", voltage: "V", current: "A" };
+const DEFAULT_UNITS: Units = { distance: "m", resistance: "ohm", voltage: "V", current: "A", resistivity: "ohm-m" };
 const UNSET = "-1";
+const MEASURE_LABELS: Record<string, string> = {
+  resistance: "Resistance", voltage: "Voltage", current: "Current", apparent_resistivity: "Apparent resistivity",
+};
 const now = () => new Date().toISOString();
 
 type RunRecord = { result: InversionResult; excluded: number[] };
@@ -59,14 +63,18 @@ export function Workspace() {
   const [station, setStation] = useState<StationMeta>(EMPTY_STATION);
   const [arrayId, setArrayId] = useState("schlumberger");
   const [units, setUnits] = useState<Units>(DEFAULT_UNITS);
-  const [useVI, setUseVI] = useState(false);
+  const [measurement, setMeasurement] = useState<Measurement>("r");
+  const [assumeMn, setAssumeMn] = useState(false);
   const [upload, setUpload] = useState<UploadInfo | null>(null);
   const [sheets, setSheets] = useState<string[]>([]);
   const fileRef = useRef<File | null>(null);
   const [mapping, setMapping] = useState<Mapping>({});
   const [excluded, setExcluded] = useState<number[]>([]);
   const [processed, setProcessed] = useState<ProcessResponse | null>(null);
-  const [runs, setRuns] = useState<RunRecord[]>([]);
+  const [runs, setRunsState] = useState<RunRecord[]>([]);
+  const runsRef = useRef<RunRecord[]>([]);
+  const inFlight = useRef(false);
+  const setRuns = useCallback((next: RunRecord[]) => { runsRef.current = next; setRunsState(next); }, []);
   const [activeRun, setActiveRun] = useState<number | null>(null);
   const [nLayers, setNLayers] = useState("3");
   const [errPct, setErrPct] = useState("3");
@@ -94,14 +102,16 @@ export function Workspace() {
   }, []);
 
   const arr: ArrayMeta | undefined = meta?.arrays.find((a) => a.id === arrayId);
-  const fields = useMemo(() => (arr ? targetFields(arr, useVI) : []), [arr, useVI]);
+  const mnAssumable = arrayId === "schlumberger";
+  const fields = useMemo(() => (arr ? targetFields(arr, measurement, assumeMn && mnAssumable) : []), [arr, measurement, assumeMn, mnAssumable]);
   const table = upload?.table ?? null;
   const missing = fields.filter((f) => (mapping[f] ?? -1) < 0);
   const stationErrors = useMemo(() => validateStation(station), [station]);
 
   const payload = useCallback((excl: number[] = excluded): Payload => ({
     array: arrayId, units, rows: table ? buildRows(table, mapping, fields) : [], excluded_rows: excl,
-  }), [arrayId, units, table, mapping, fields, excluded]);
+    assume_point_mn: assumeMn && mnAssumable,
+  }), [arrayId, units, table, mapping, fields, excluded, assumeMn, mnAssumable]);
 
   const run = activeRun != null ? (runs[activeRun] ?? null) : null;
   const runId = run?.result.run_id ?? null;
@@ -112,17 +122,17 @@ export function Workspace() {
   }, [run, interpretation]);
 
   // ------------------------------------------------------------------ data loading
-  const resetResults = () => {
+  const resetResults = useCallback(() => {
     setProcessed(null); setRuns([]); setActiveRun(null); setSelected(null); setNotice(null);
     setSugState(null); setColumnUrl(null);
-  };
+  }, [setRuns]);
 
-  const setUploaded = (info: UploadInfo, nextArr = arr, vi = useVI) => {
+  const setUploaded = (info: UploadInfo, nextArr = arr, mode: Measurement = measurement, mn = assumeMn) => {
     setUpload(info);
     setExcluded([]);
     resetResults();
     setError(null);
-    if (nextArr) setMapping(autoMap(info.table.headers, targetFields(nextArr, vi)));
+    if (nextArr) setMapping(autoMap(info.table.headers, targetFields(nextArr, mode, mn && nextArr.id === "schlumberger")));
     log(`Loaded ${info.file_name} (${info.table.rows.length} rows, SHA-256 ${info.sha256.slice(0, 12)}…)`);
     setTab("data");
   };
@@ -160,13 +170,13 @@ export function Workspace() {
   const loadSample = async () => {
     fileRef.current = null; setSheets([]);
     const sa = meta?.arrays.find((a) => a.id === "schlumberger");
-    setArrayId("schlumberger"); setUseVI(false); setUnits(DEFAULT_UNITS);
+    setArrayId("schlumberger"); setMeasurement("r"); setAssumeMn(false); setUnits(DEFAULT_UNITS);
     setUploaded({ file_name: "synthetic_schlumberger_3layer.csv", sha256: await sha256Hex(SAMPLE_CSV),
-      table: parseCsv(SAMPLE_CSV), original: { kind: "text", data: SAMPLE_CSV } }, sa, false);
+      table: parseCsv(SAMPLE_CSV), original: { kind: "text", data: SAMPLE_CSV } }, sa, "r", false);
   };
 
-  const remap = (nextArr: ArrayMeta | undefined, vi: boolean) => {
-    if (table && nextArr) setMapping(autoMap(table.headers, targetFields(nextArr, vi)));
+  const remap = (nextArr: ArrayMeta | undefined, mode: Measurement, mn = assumeMn) => {
+    if (table && nextArr) setMapping(autoMap(table.headers, targetFields(nextArr, mode, mn && nextArr.id === "schlumberger")));
     resetResults();
   };
 
@@ -196,22 +206,26 @@ export function Workspace() {
   };
 
   const runInvert = async () => {
+    if (inFlight.current) return;            // never run two inversions at once
+    inFlight.current = true;
     setBusy("invert"); setError(null);
     try {
       const config: InversionConfig = { n_layers: Number(nLayers), error_percent: Number(errPct) };
       const res = await invert({ ...payload(), config });
-      const existing = runs.findIndex((r) => r.result.run_id === res.run_id);
+      const cur = runsRef.current;           // authoritative list (not a stale render closure)
+      const existing = cur.findIndex((r) => r.result.run_id === res.run_id);
       if (existing >= 0) {
         setActiveRun(existing);
         setNotice(`Same data and settings as Run ${existing + 1} — the result is identical (reproducible).`);
       } else {
-        setRuns([...runs, { result: res, excluded: [...excluded] }]);
-        setActiveRun(runs.length);
+        const next = [...cur, { result: res, excluded: [...excluded] }];
+        setRuns(next);
+        setActiveRun(next.length - 1);
         setNotice(null);
-        log(`Inversion run ${runs.length + 1}: ${res.config.n_layers} layers, error ${res.config.error_percent}%, RMS ${res.rms_percent.toFixed(2)}%, run ${res.run_id}`);
+        log(`Inversion run ${next.length}: ${res.config.n_layers} layers, error ${res.config.error_percent}%, RMS ${res.rms_percent.toFixed(2)}%, run ${res.run_id}`);
       }
     } catch (e) { setError((e as Error).message); }
-    finally { setBusy(null); }
+    finally { inFlight.current = false; setBusy(null); }
   };
 
   // ------------------------------------------------------------------ interpretation
@@ -269,14 +283,15 @@ export function Workspace() {
 
   // ------------------------------------------------------------------ persistence
   const snapshot = useCallback((): SavedState => ({
-    format: "ves-studio-project", version: 1, saved_at: now(), project, station, upload, arrayId, units, useVI, mapping,
+    format: "ves-studio-project", version: 1, saved_at: now(), project, station, upload, arrayId, units, useVI: measurement === "vi", measurement, assumeMn, mapping,
     excluded, runs: runs.map((r) => ({ config: r.result.config, excluded: r.excluded })), activeRun, interpretation,
     geologicalContext: context, conclusion, history,
-  }), [project, station, upload, arrayId, units, useVI, mapping, excluded, runs, activeRun, interpretation, context, conclusion, history]);
+  }), [project, station, upload, arrayId, units, measurement, assumeMn, mapping, excluded, runs, activeRun, interpretation, context, conclusion, history]);
 
   const applyState = useCallback(async (s: SavedState, from: "session" | "file") => {
-    setProject(s.project); setStation(s.station); setUpload(s.upload); setArrayId(s.arrayId); setUnits(s.units);
-    setUseVI(s.useVI); setMapping(s.mapping); setExcluded(s.excluded); setInterpretation(s.interpretation);
+    setProject(s.project); setStation(s.station); setUpload(s.upload); setArrayId(s.arrayId);
+    const mode: Measurement = s.measurement ?? (s.useVI ? "vi" : "r");
+    setMeasurement(mode); setAssumeMn(!!s.assumeMn); setUnits({ ...DEFAULT_UNITS, ...s.units }); setMapping(s.mapping); setExcluded(s.excluded); setInterpretation(s.interpretation);
     setContext(s.geologicalContext); setConclusion(s.conclusion); setHistory(s.history);
     setSheets([]); fileRef.current = null;
     resetResults();
@@ -285,8 +300,9 @@ export function Workspace() {
     try {
       const arrMeta = (await getArrays()).arrays.find((a) => a.id === s.arrayId);
       if (!arrMeta) return;
-      const fs = targetFields(arrMeta, s.useVI);
-      const base = { array: s.arrayId, units: s.units, rows: buildRows(s.upload.table, s.mapping, fs) };
+      const mn = !!s.assumeMn && s.arrayId === "schlumberger";
+      const fs = targetFields(arrMeta, mode, mn);
+      const base = { array: s.arrayId, units: { ...DEFAULT_UNITS, ...s.units }, rows: buildRows(s.upload.table, s.mapping, fs), assume_point_mn: mn };
       setProcessed(await processData({ ...base, excluded_rows: s.excluded }));
       const restored: RunRecord[] = [];
       for (const r of s.runs) restored.push({ result: await invert({ ...base, excluded_rows: r.excluded, config: r.config }), excluded: r.excluded });
@@ -295,7 +311,7 @@ export function Workspace() {
       setNotice(from === "file" ? "Project file opened; results were recomputed from the saved data." : "Restored your last session; results were recomputed from the saved data.");
       setTab(restored.length ? "inversion" : "data");
     } catch (e) { setError((e as Error).message); }
-  }, []);
+  }, [setRuns, resetResults]);
 
   useEffect(() => {
     // Deferred so restoring state is not a synchronous setState inside the effect.
@@ -322,7 +338,7 @@ export function Workspace() {
     clearSaved();
     setProject(EMPTY_PROJECT); setStation(EMPTY_STATION); setUpload(null); setExcluded([]); setMapping({});
     setInterpretation({}); setContext(""); setConclusion(""); setHistory([]); setSheets([]); fileRef.current = null;
-    setUnits(DEFAULT_UNITS); setUseVI(false); resetResults(); setError(null); setTab("project");
+    setUnits(DEFAULT_UNITS); setMeasurement("r"); setAssumeMn(false); resetResults(); setError(null); setTab("project");
   };
 
   // ------------------------------------------------------------------ exports
@@ -429,11 +445,11 @@ export function Workspace() {
             <CardContent className="grid gap-4">
               <div className="grid gap-2">
                 <Label>Electrode array</Label>
-                <Pick label="Electrode array" value={arrayId} onChange={(v) => { setArrayId(v); remap(meta?.arrays.find((a) => a.id === v), useVI); }}
+                <Pick label="Electrode array" value={arrayId} onChange={(v) => { setArrayId(v); remap(meta?.arrays.find((a) => a.id === v), measurement); }}
                   options={(meta?.arrays ?? []).map((a) => ({ value: a.id, label: a.title }))} />
               </div>
               <div className="grid grid-cols-2 gap-3">
-                {(["distance", "resistance", "voltage", "current"] as const).map((q) => (
+                {(["distance", ...(measurement === "rho" ? ["resistivity"] : measurement === "vi" ? ["voltage", "current"] : ["resistance"])] as (keyof Units)[]).map((q) => (
                   <div key={q} className="grid gap-2">
                     <Label className="capitalize">{q}</Label>
                     <Pick label={`${q} unit`} value={units[q]} onChange={(v) => { setUnits((u) => ({ ...u, [q]: v })); setProcessed(null); }}
@@ -443,9 +459,18 @@ export function Workspace() {
               </div>
               <div className="grid gap-2">
                 <Label>Measured quantity</Label>
-                <Pick label="Measured quantity" value={useVI ? "vi" : "r"} onChange={(v) => { setUseVI(v === "vi"); remap(arr, v === "vi"); }}
-                  options={[{ value: "r", label: "Resistance" }, { value: "vi", label: "Voltage + current" }]} />
+                <Pick label="Measured quantity" value={measurement} onChange={(v) => { setMeasurement(v as Measurement); remap(arr, v as Measurement); }}
+                  options={[{ value: "r", label: "Resistance" }, { value: "vi", label: "Voltage + current" }, { value: "rho", label: "Apparent resistivity (already calculated)" }]} />
               </div>
+              {mnAssumable && (
+                <label className="flex items-start gap-2 text-sm">
+                  <Checkbox checked={assumeMn} onCheckedChange={(c) => { setAssumeMn(c === true); remap(arr, measurement, c === true); }} className="mt-0.5" />
+                  <span>
+                    MN/2 is not in my file — assume point electrodes
+                    <span className="block text-xs text-muted-foreground">Recorded in the report. Supply MN/2 for finite-electrode accuracy.</span>
+                  </span>
+                </label>
+              )}
               {arr && <p className="text-xs text-muted-foreground">References: {arr.references.join("; ")}</p>}
             </CardContent>
           </Card>
@@ -502,7 +527,7 @@ export function Workspace() {
               <CardContent className="grid gap-4">
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {fields.map((f) => {
-                    const label = arr.fields.find((x) => x.name === f)?.label ?? f;
+                    const label = arr.fields.find((x) => x.name === f)?.label ?? MEASURE_LABELS[f] ?? f;
                     const idx = mapping[f] ?? -1;
                     return (
                       <div key={f} className="grid gap-2">

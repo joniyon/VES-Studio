@@ -35,6 +35,7 @@ const ALIASES: Record<string, string[]> = {
   mn: ["mn", "mnspacing"],
   x: ["x", "offset", "position"],
   resistance: ["r", "res", "resistance", "rohm", "rohms"],
+  apparent_resistivity: ["rhoa", "rho", "apparentresistivity", "resistivity", "ohmm", "pa"],
   voltage: ["v", "voltage", "dv", "deltav", "vmn"],
   current: ["i", "current", "amps", "iab"],
 };
@@ -42,8 +43,11 @@ const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 export type Mapping = Record<string, number>; // canonical field -> header index (-1 = unmapped)
 
-export function targetFields(arr: ArrayMeta, useVI: boolean): string[] {
-  return [...arr.fields.map((f) => f.name), ...(useVI ? ["voltage", "current"] : ["resistance"])];
+export type Measurement = "r" | "vi" | "rho";
+
+export function targetFields(arr: ArrayMeta, mode: Measurement, assumeMn = false): string[] {
+  const geometry = arr.fields.map((f) => f.name).filter((f) => !(assumeMn && f === "mn_half"));
+  return [...geometry, ...(mode === "vi" ? ["voltage", "current"] : mode === "rho" ? ["apparent_resistivity"] : ["resistance"])];
 }
 
 export function autoMap(headers: string[], fields: string[]): Mapping {

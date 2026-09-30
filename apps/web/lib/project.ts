@@ -25,7 +25,9 @@ export type SavedState = {
   upload: UploadInfo | null;
   arrayId: string;
   units: Units;
-  useVI: boolean;
+  useVI: boolean;                 // legacy (files saved before `measurement` existed)
+  measurement?: "r" | "vi" | "rho";
+  assumeMn?: boolean;
   mapping: Mapping;
   excluded: number[];
   runs: { config: InversionConfig; excluded: number[] }[];

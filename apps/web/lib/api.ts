@@ -12,7 +12,7 @@ export type Issue = {
 export type ArrayField = { name: string; label: string; kind: "distance" | "integer" };
 export type ArrayMeta = { id: string; title: string; fields: ArrayField[]; references: string[] };
 export type ArraysResponse = { arrays: ArrayMeta[]; units: Record<string, string[]> };
-export type Units = { distance: string; resistance: string; voltage: string; current: string };
+export type Units = { distance: string; resistance: string; voltage: string; current: string; resistivity: string };
 
 export type ProcessedRow = Record<string, number | string | null> & {
   source_row: number;
@@ -110,7 +110,7 @@ export async function fetchBlob(path: string, payload?: unknown): Promise<Blob> 
   return res.blob();
 }
 export type Payload = {
-  array: string; units: Units; rows: Record<string, unknown>[]; excluded_rows: number[];
+  array: string; units: Units; rows: Record<string, unknown>[]; excluded_rows: number[]; assume_point_mn: boolean;
 };
 export const processData = (p: Payload) =>
   post("/process", p) as Promise<ProcessResponse>;

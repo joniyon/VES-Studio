@@ -21,7 +21,7 @@ Checked against section 36 of the scope. "Evidence" points to the test or UI fea
 | Inversion reproducible | Done | Stable run ID; session restore recomputes identical run IDs |
 | Subsurface model visualised | Done | Resistivity-depth profile + geological column with lithology colours/hatches |
 | Report generation works | Done | PDF (`tests/test_reports.py`), plus CSV/PNG/SVG/JSON/project-file exports |
-| **Real VES dataset upload → report** | **Not verified** | Only synthetic data has been run end to end. Needs a real field dataset |
+| **Real VES dataset upload → report** | **Partly verified** | Ayetoro field file (6 soundings, apparent resistivity, no MN/2) ran upload → QC → inversion → PDF/CSV export. Results are data-limited (noisy, RMS 18–44 %); not yet reviewed by a geophysicist or compared with other software |
 
 ## Also delivered
 Project and station metadata (with coordinate validation), processing history, autosave, project-file save/open

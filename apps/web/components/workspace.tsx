@@ -58,6 +58,7 @@ export function Workspace() {
   const [selected, setSelected] = useState<number | null>(null);
   const [busy, setBusy] = useState<"process" | "invert" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [tab, setTab] = useState("data");
 
   useEffect(() => {
@@ -75,6 +76,7 @@ export function Workspace() {
     setActiveRun(null);
     setSelected(null);
     setError(null);
+    setNotice(null);
     if (arr) setMapping(autoMap(t.headers, targetFields(arr, useVI)));
   };
 
@@ -115,8 +117,17 @@ export function Workspace() {
         array: arrayId, units, rows: payloadRows(),
         config: { n_layers: Number(nLayers), error_percent: Number(errPct) },
       });
-      setRuns((r) => [...r, res]); // append-only history
-      setActiveRun(runs.length);
+      // Identical data + settings reproduce the identical run (same run_id): reuse it
+      // instead of appending a duplicate. Any changed setting yields a new run.
+      const existing = runs.findIndex((r) => r.run_id === res.run_id);
+      if (existing >= 0) {
+        setActiveRun(existing);
+        setNotice(`Same data and settings as Run ${existing + 1} — the result is identical (reproducible).`);
+      } else {
+        setRuns([...runs, res]); // append-only history
+        setActiveRun(runs.length);
+        setNotice(null);
+      }
     } catch (e) { setError((e as Error).message); }
     finally { setBusy(null); }
   };
@@ -451,10 +462,16 @@ export function Workspace() {
             </CardContent>
           </Card>
 
+          {notice && (
+            <Alert>
+              <Info />
+              <AlertDescription>{notice}</AlertDescription>
+            </Alert>
+          )}
           {runs.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {runs.map((r, i) => (
-                <Button key={r.run_id} size="sm" variant={i === activeRun ? "default" : "outline"} onClick={() => setActiveRun(i)}>
+                <Button key={`${i}-${r.run_id}`} size="sm" variant={i === activeRun ? "default" : "outline"} onClick={() => setActiveRun(i)}>
                   Run {i + 1} · {r.config.n_layers} layers · RMS {fmt(r.rms_percent, 3)}%
                 </Button>
               ))}

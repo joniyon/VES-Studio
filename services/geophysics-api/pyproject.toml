@@ -1,0 +1,13 @@
+[project]
+name = "ves-geophysics-api"
+version = "0.1.0"
+description = "Scientific engine for VES Studio: electrode arrays, apparent resistivity, QC"
+requires-python = ">=3.11"
+dependencies = ["numpy", "pandas", "scipy", "openpyxl"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

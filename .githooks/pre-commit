@@ -1,0 +1,14 @@
+#!/bin/sh
+# Keep UI work and scientific-engine work in separate commits.
+# Override deliberately with:  ENGINE_CHANGE=1 git commit ...
+staged=$(git diff --cached --name-only)
+engine=$(echo "$staged" | grep -E '^(services/geophysics-api/app/|scientific/|services/geophysics-api/tests/)')
+ui=$(echo "$staged" | grep -E '^apps/web/')
+if [ -n "$engine" ] && [ -n "$ui" ] && [ -z "$ENGINE_CHANGE" ]; then
+  echo "Blocked: this commit mixes engine files and apps/web files. Split it (or set ENGINE_CHANGE=1)."
+  exit 1
+fi
+if [ -n "$engine" ] && echo "$engine" | grep -q '^services/geophysics-api/app/'; then
+  echo "Engine files changed - running engine tests..."
+  cd services/geophysics-api && DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/opt/lapack/lib .venv/bin/python -m pytest -q || { echo "Engine tests failed."; exit 1; }
+fi

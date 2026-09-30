@@ -4,8 +4,8 @@ Open-source-first platform for Vertical Electrical Sounding processing, QC, 1D i
 Scope: [docs/product/ves-studio-scope.rtf](docs/product/ves-studio-scope.rtf).
 
 ## Status: Phase 1 — scientific engine (in progress)
-Done: six electrode arrays, geometric factors, unit handling, validation/QC, apparent resistivity with lineage, 59 tests, pyGIMLi cross-check, layered forward model.
-Next: 1D inversion wrapper (pyGIMLi abstraction), published-example validation, then Phase 2 foundation.
+Done: six electrode arrays, geometric factors, unit handling, validation/QC, apparent resistivity with lineage, 1D inversion wrapper (pyGIMLi backend), layered forward model, pyGIMLi cross-check, 66 tests.
+Next: published-example validation, FastAPI layer (app/api), then Phase 2 foundation.
 
 ## Run tests
     cd services/geophysics-api

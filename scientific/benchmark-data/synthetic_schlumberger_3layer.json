@@ -1,0 +1,17 @@
+{
+  "description": "Noise-free synthetic Schlumberger sounding, point-electrode forward model (app.inversion.forward)",
+  "rho_ohm_m": [
+    100,
+    20,
+    300
+  ],
+  "thickness_m": [
+    2,
+    10
+  ],
+  "units": {
+    "distance": "m",
+    "resistance": "ohm"
+  },
+  "generated_with": "engine 0.1.0"
+}

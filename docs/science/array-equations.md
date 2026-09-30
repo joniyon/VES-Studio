@@ -21,10 +21,14 @@ Positions below are along one line, lengths in metres.
 2. Closed form vs. general formula: agree to relative 1e-9 for every array.
 3. Homogeneous half-space benchmark: potentials from the analytic point-source solution, recovered ρa = ρ to 1e-8.
 
-**Not yet done:** comparison against an independent software implementation (pyGIMLi `ert.geometricFactors`,
-ResIPy) and against published worked examples with page-level citations. pyGIMLi has no wheel for the
-Python 3.13 in use (`pgcore` unavailable); do this cross-check in a Python 3.11/3.12 environment.
-Layered-earth forward modelling (Ghosh 1971 / Koefoed 1979 filters) belongs to the inversion phase.
+4. **pyGIMLi cross-check (done):** `ert.geometricFactors` agrees with every array to relative 1e-9
+   (`tests/test_pygimli_crosscheck.py`). Layered Schlumberger forward model (numerical Hankel integration,
+   `app/inversion/forward.py`) agrees with `pygimli.physics.ves.VESModelling` to relative 1e-4 for a 3-layer
+   model, plus analytic limits (half-space, rho1/rho2 asymptotes).
+
+**Still not done:** comparison against published worked examples with page-level citations, and a
+second independent package (e.g. ResIPy). pyGIMLi needs Python 3.12 and, on macOS, `brew install lapack`
+with `DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/opt/lapack/lib`.
 
 ## Guideline thresholds (WARNING only, not errors)
 - Schlumberger: MN ≤ AB/5 (practical rule of thumb).

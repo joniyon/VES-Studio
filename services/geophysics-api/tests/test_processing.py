@@ -107,3 +107,15 @@ def test_reproducible():
     df = pd.DataFrame({"a": [1, 2, 4, 8], "resistance": [5, 4, 3, 2]})
     a, b = process_dataset(df, "wenner"), process_dataset(df, "wenner")
     pd.testing.assert_frame_equal(a.table, b.table)
+
+
+def test_benchmark_dataset_roundtrip():
+    """Synthetic 3-layer sounding -> resistance -> pipeline must return the forward-model rho_a."""
+    from pathlib import Path
+    from app.inversion.forward import schlumberger_forward
+    d = Path(__file__).resolve().parents[3] / "scientific" / "benchmark-data"
+    df = pd.read_csv(d / "synthetic_schlumberger_3layer.csv")
+    res = process_dataset(df, "schlumberger")
+    assert not res.has_errors
+    expected = schlumberger_forward(df.ab_half, [100, 20, 300], [2, 10])
+    np.testing.assert_allclose(res.table.apparent_resistivity, expected, rtol=1e-6)

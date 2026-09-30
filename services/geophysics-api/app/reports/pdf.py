@@ -102,6 +102,9 @@ def build_report(*, project: dict, station: dict, processed, result, interpretat
         f"electrode geometry of the {arr.name.replace('_', '-')} array. Measured values are validated, flagged where suspect, "
         "converted to apparent resistivity, and inverted for a layered (1D) earth model."), Spacer(1, 4),
         _kv([("Array", arr.name.replace("_", "-")), ("Input units", str(processed.lineage["units"])),
+             ("Measured quantity", str(processed.lineage.get("measurement", "")).replace("_", " ")),
+             ("Assumptions", "MN/2 was not supplied; the point-electrode approximation (MN/2 = 0.1 % of AB/2) was used."
+                             if processed.lineage.get("mn_half_assumed") else ""),
              ("Array references", "; ".join(arr.references)),
              ("Inversion", f"Regularised least-squares (pyGIMLi {result.metadata.get('pygimli')}), {result.config.n_layers} layers, "
                            f"assumed data error {result.config.error_percent:g} %, λ = {result.config.lam:g}"),

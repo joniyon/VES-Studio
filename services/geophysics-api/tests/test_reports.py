@@ -57,3 +57,15 @@ def test_pdf_report_contents(chain):
     for needle in ("Araromi VES Survey", "VES-001", "Methodology", "Data quality", "Limitations", "Conclusion",
                    "non-uniqueness".lower(), "abc123", r.run_id, "Basement complex terrain"):
         assert needle.lower() in text.lower(), needle
+
+
+def test_report_states_mn_assumption():
+    import numpy as np
+    from app.inversion.forward import schlumberger_forward
+    ab = np.array([1.5, 2, 3, 5, 7, 10, 15, 20, 30, 50, 70, 100, 150, 200.0])
+    df = pd.DataFrame({"ab_half": ab, "apparent_resistivity": schlumberger_forward(ab, [100, 20, 300], [2, 10])})
+    p = process_dataset(df, "schlumberger", assume_point_mn=True)
+    r = invert_station(p, InversionConfig(n_layers=3))
+    pdf = build_report(project={"name": "X"}, station={"id": "S"}, processed=p, result=r, interpretation=[])
+    text = "\n".join(pg.extract_text() for pg in PdfReader(io.BytesIO(pdf)).pages)
+    assert "point-electrode approximation" in text and "MN/2 was not supplied" in text

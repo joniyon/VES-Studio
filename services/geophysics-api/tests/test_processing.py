@@ -151,3 +151,19 @@ def test_bad_apparent_resistivity_values():
     df = pd.DataFrame({"a": [1.0, 2.0, 3.0], "apparent_resistivity": [10.0, 0.0, -5.0]})
     res = process_dataset(df, "wenner")
     assert "RESISTANCE_ZERO" in codes(res, Severity.ERROR) and "RESISTANCE_NEGATIVE" in codes(res, Severity.WARNING)
+
+
+def test_full_mn_column_is_halved_and_recorded():
+    df = pd.DataFrame({"ab_half": [10.0, 20.0, 40.0], "mn_half": [1.0, 1.0, 2.0], "resistance": [2.0, 1.0, 0.5]})
+    full = process_dataset(df, "schlumberger", mn_is_full=True)
+    half = process_dataset(df.assign(mn_half=df.mn_half / 2), "schlumberger")
+    np.testing.assert_allclose(full.table.mn_half_m, [0.5, 0.5, 1.0])
+    np.testing.assert_allclose(full.table.geometric_factor, half.table.geometric_factor)
+    assert full.lineage["mn_column_was_full_mn"] is True and "MN_FULL_HALVED" in codes(full)
+    assert process_dataset(df, "schlumberger").lineage["mn_column_was_full_mn"] is False
+
+
+def test_full_mn_flag_ignored_for_other_arrays_and_missing_column():
+    df = pd.DataFrame({"a": [1.0, 2.0], "resistance": [1.0, 1.0]})
+    res = process_dataset(df, "wenner", mn_is_full=True)
+    assert res.lineage["mn_column_was_full_mn"] is False and not res.has_errors

@@ -94,3 +94,9 @@ def test_working_curve_preview_and_inversion_with_working_config():
     dd = c.post("/working-curve", json={"array": "dipole_dipole", "working": {"overlap": "average"},
                                         "rows": [{"a": 5, "n": n, "apparent_resistivity": 10.0} for n in (1, 2, 3)]}).json()
     assert "soundings only" in dd["error"]
+
+
+def test_mn_is_full_flag_through_api():
+    rows = [{"ab_half": a, "mn_half": 1.0, "resistance": r} for a, r in [(10, 2.0), (20, 1.0), (40, 0.5)]]
+    r = c.post("/process", json={"array": "schlumberger", "rows": rows, "mn_is_full": True}).json()
+    assert r["lineage"]["mn_column_was_full_mn"] is True and r["rows"][0]["mn_half_m"] == 0.5

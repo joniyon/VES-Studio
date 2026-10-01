@@ -41,7 +41,8 @@ def _fatal(msg, code, field_=None) -> ProcessedDataset:
 
 def process_dataset(df: pd.DataFrame, array_name: str, units: dict | None = None,
                     excluded_rows: set[int] | frozenset[int] | None = None,
-                    assume_point_mn: bool = False) -> ProcessedDataset:
+                    assume_point_mn: bool = False,
+                    mn_is_full: bool = False) -> ProcessedDataset:
     units = {**DEFAULT_UNITS, **(units or {})}
     arr = get_array(array_name)
     geom_cols = list(arr.required_fields) + list(arr.integer_fields)
@@ -49,6 +50,11 @@ def process_dataset(df: pd.DataFrame, array_name: str, units: dict | None = None
     if df is None or len(df) == 0:
         return _fatal("The dataset contains no rows.", "EMPTY_DATASET")
 
+    mn_halved = False
+    if mn_is_full and arr.name == "schlumberger" and "mn_half" in df.columns:
+        # the supplied MN column is the full potential-electrode spacing: MN/2 = MN / 2 (recorded)
+        df = df.assign(mn_half=pd.to_numeric(df["mn_half"], errors="coerce") / 2.0)
+        mn_halved = True
     point_mn = False
     if (assume_point_mn and arr.name == "schlumberger" and "mn_half" not in df.columns
             and "ab_half" in df.columns):
@@ -72,6 +78,9 @@ def process_dataset(df: pd.DataFrame, array_name: str, units: dict | None = None
         issues.append(Issue(Severity.WARNING, "MN_ASSUMED",
                             "MN/2 was not provided: the point-electrode approximation (MN/2 = 0.1 % of AB/2) is "
                             "used. Supply MN/2 to account for finite potential electrodes.", None, "mn_half"))
+    if mn_halved:
+        issues.append(Issue(Severity.INFO, "MN_FULL_HALVED",
+                            "The MN column was treated as the full MN spacing; MN/2 = MN ÷ 2 was used.", None, "mn_half"))
     raw = df.reset_index(drop=True)
     out = pd.DataFrame({"source_row": np.arange(len(raw))})
 
@@ -206,6 +215,7 @@ def process_dataset(df: pd.DataFrame, array_name: str, units: dict | None = None
         "columns_used": value_cols,
         "measurement": "apparent_resistivity" if has_rho else "resistance" if has_r else "voltage_current",
         "mn_half_assumed": point_mn,
+        "mn_column_was_full_mn": mn_halved,
         "excluded_rows": sorted(i for i in excluded if 0 <= i < len(raw)),
         "references": list(arr.references),
         "formula": "rho_a = K * (dV / I),  K from electrode geometry (see array.references)",

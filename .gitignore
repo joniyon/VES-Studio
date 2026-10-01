@@ -5,3 +5,6 @@ node_modules/
 .next/
 .env*
 .DS_Store
+
+# private field data (not committed)
+data/

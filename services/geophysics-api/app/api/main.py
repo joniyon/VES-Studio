@@ -52,6 +52,7 @@ class Dataset(BaseModel):
     rows: list[dict]
     excluded_rows: list[int] = Field(default_factory=list)
     assume_point_mn: bool = False
+    mn_is_full: bool = False
 
 
 class InvertRequest(Dataset):
@@ -114,7 +115,8 @@ def arrays():
 
 def _process(req: Dataset):
     get_array(req.array)  # raises ValueError -> 422
-    return process_dataset(pd.DataFrame(req.rows), req.array, req.units, set(req.excluded_rows), req.assume_point_mn)
+    return process_dataset(pd.DataFrame(req.rows), req.array, req.units, set(req.excluded_rows), req.assume_point_mn,
+                           req.mn_is_full)
 
 
 def _config(req: InvertRequest) -> InversionConfig:

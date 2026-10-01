@@ -193,3 +193,27 @@ def test_working_curve_rejected_for_profiling_arrays_and_too_few_points():
     few = process_dataset(_segmented_sounding().head(8), "schlumberger", assume_point_mn=True)
     with pytest.raises(InversionError):
         invert_station(few, InversionConfig(n_layers=5, working=WorkingCurveConfig(smooth="median")))
+
+
+def test_merged_overlaps_are_evaluated_at_each_raw_mn_not_an_averaged_mn():
+    """Averaging repeated spacings must not invent an averaged MN/2: the backend sees one datum per raw row."""
+    from app.inversion.pygimli_backend import PygimliBackend
+    from app.processing import WorkingCurveConfig
+    ab = np.array([1.0, 2, 4, 6, 6, 10, 15, 15, 25, 40, 40, 65])
+    mn = np.array([0.25, 0.25, 0.25, 0.25, 0.5, 0.5, 0.5, 1.0, 1.0, 1.0, 2.5, 2.5])
+    from app.inversion.forward import schlumberger_forward
+    df = pd.DataFrame({"ab_half": ab, "mn_half": mn, "apparent_resistivity": schlumberger_forward(ab, TRUE_RHO, TRUE_TH)})
+    seen = {}
+
+    class Spy(PygimliBackend):
+        def invert(self, spacing, distances, observed, cfg, error_scale=None):
+            seen.update(am=distances["am"], an=distances["an"], err=error_scale, n=len(observed))
+            return super().invert(spacing, distances, observed, cfg, error_scale)
+
+    r = invert_station(process_dataset(df, "schlumberger"),
+                       InversionConfig(n_layers=3, working=WorkingCurveConfig(overlap="average")), backend=Spy())
+    assert seen["n"] == len(ab) and len(r.spacing) == 9            # 12 raw configs behind 9 working points
+    half_mn = (seen["an"] - seen["am"]) / 2                           # recovers each datum's own MN/2 (a_pos = -AB/2)
+    assert sorted(set(np.round(half_mn, 3))) == [0.25, 0.5, 1.0, 2.5]   # no 0.375 / 0.75 / 1.75 averages
+    assert np.isclose(seen["err"], [1, 1, 1, 2**.5, 2**.5, 1, 2**.5, 2**.5, 1, 2**.5, 2**.5, 1]).all()
+    assert len(r.model_response) == len(r.observed) == 9

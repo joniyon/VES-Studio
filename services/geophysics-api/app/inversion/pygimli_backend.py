@@ -19,7 +19,7 @@ def default_start(spacing, observed, cfg: InversionConfig):
 class PygimliBackend:
     name = "pygimli"
 
-    def invert(self, spacing, distances: dict, observed, cfg: InversionConfig) -> dict:
+    def invert(self, spacing, distances: dict, observed, cfg: InversionConfig, error_scale=None) -> dict:
         import pygimli as pg
         from pygimli.physics.ves import VESModelling
 
@@ -32,6 +32,8 @@ class PygimliBackend:
         inv.transData = pg.trans.TransLog()
         start = pg.Vector(list(th0) + list(rho0))
         err = np.full(len(observed), cfg.error_percent / 100.0)
+        if error_scale is not None:   # per-datum weighting (error * scale)
+            err = err * np.asarray(error_scale, float)
         model = np.array(inv.run(pg.Vector(observed), pg.Vector(err), startModel=start,
                                  lam=cfg.lam, maxIter=cfg.max_iter))
         # default per-region log transforms apply; enforce bounds after the fact so the

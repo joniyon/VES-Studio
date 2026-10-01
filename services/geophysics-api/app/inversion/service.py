@@ -102,17 +102,32 @@ def invert_station(processed: ProcessedDataset, config: InversionConfig | None =
         if len(wc.spacing) < 2 * cfg.n_layers - 1:
             raise InversionError(f"The working curve has {len(wc.spacing)} points, fewer than the "
                                  f"{2 * cfg.n_layers - 1} parameters of a {cfg.n_layers}-layer model.")
-        params = ({"ab_half": wc.spacing, "mn_half": wc.mn} if array == "schlumberger" else {arr.required_fields[0]: wc.spacing})
         spacing, obs = wc.spacing, wc.values
         rows_used = np.array(sorted({r for g in wc.source_rows for r in g}))
         working_info = {"description": cfg.working.describe(), "shifts": wc.shifts, "notes": wc.notes,
                         "n_segments": len(wc.shifts), "source_rows": wc.source_rows}
+        # Each working point is evaluated at the real electrode configuration(s) behind it: one datum per
+        # raw row (its own MN/2), all targeting the working value. No synthetic, averaged MN/2 is invented.
+        # Points that merge k raw rows are down-weighted (error * sqrt(k)) so overlaps are not counted twice.
+        row_pos = {int(r): i for i, r in enumerate(use.source_row.to_numpy(int))}
+        expand = [[row_pos[r] for r in g] for g in wc.source_rows]
+        idx = np.array([i for g in expand for i in g])
+        group = np.repeat(np.arange(len(expand)), [len(g) for g in expand])
+        k = np.array([len(g) for g in expand])[group]
+        params = {key: np.asarray(v)[idx] for key, v in raw_params.items()}
+        d_obs, d_err = obs[group], np.sqrt(k)
 
     _, dist = _geometry(arr, params)
-    raw = backend.invert(spacing, dist, obs, cfg)
+    if cfg.working.is_identity:
+        raw = backend.invert(spacing, dist, obs, cfg)
+        resp = np.asarray(raw["response"], float)
+    else:
+        raw = backend.invert(raw_spacing[idx], dist, d_obs, cfg, error_scale=d_err)
+        r_d = np.asarray(raw["response"], float)
+        # response per working point = geometric mean over the raw configurations behind it
+        resp = np.exp(np.bincount(group, np.log(r_d)) / np.bincount(group))
     rho = np.clip(np.asarray(raw["resistivity"], float), *cfg.rho_bounds)
     th = np.asarray(raw["thickness"], float)
-    resp = np.asarray(raw["response"], float)
     rel = (obs - resp) / obs
     rms = float(np.sqrt(np.mean(rel**2)) * 100)
     chi2 = float(np.mean((rel / (cfg.error_percent / 100.0)) ** 2))

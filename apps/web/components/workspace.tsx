@@ -403,6 +403,8 @@ export function Workspace() {
   const counts = { ERROR: issues.filter((i) => i.severity === "ERROR").length, WARNING: issues.filter((i) => i.severity === "WARNING").length };
   const sel = rows.find((r) => r.source_row === selected) ?? null;
   const r0 = run?.result ?? null;
+  const eq = r0?.equivalence && Object.keys(r0.equivalence).length ? r0.equivalence : null;
+  const eqLayers = eq?.constrained && eq.layers?.length ? eq.layers : null;
   const excludeBtn = (row: number, status: string) =>
     status === "ERROR" ? null : (
       <Button size="xs" variant="outline" onClick={(e) => { e.stopPropagation(); toggleExclude(row); }}>
@@ -741,7 +743,7 @@ export function Workspace() {
                   <CardContent>
                     <Table>
                       <TableHeader>
-                        <TableRow><TableHead>#</TableHead><TableHead>ρ (Ωm)</TableHead><TableHead>Thickness (m)</TableHead><TableHead>Top (m)</TableHead><TableHead>Bottom (m)</TableHead></TableRow>
+                        <TableRow><TableHead>#</TableHead><TableHead>ρ (Ωm)</TableHead><TableHead>Thickness (m)</TableHead><TableHead>Top (m)</TableHead><TableHead>Bottom (m)</TableHead>{eqLayers && <><TableHead>ρ range (Ωm)</TableHead><TableHead>Top range (m)</TableHead></>}</TableRow>
                       </TableHeader>
                       <TableBody>
                         {r0.resistivity.map((rho, i) => (
@@ -751,10 +753,21 @@ export function Workspace() {
                             <TableCell className="tabular-nums">{i < r0.thickness.length ? fmt(r0.thickness[i]) : "half-space"}</TableCell>
                             <TableCell className="tabular-nums">{fmt(r0.depth_top[i])}</TableCell>
                             <TableCell className="tabular-nums">{r0.depth_bottom[i] == null ? "∞" : fmt(r0.depth_bottom[i])}</TableCell>
+                            {eqLayers && (<>
+                              <TableCell className="tabular-nums">{fmt(eqLayers[i].rho_min, 3)} – {fmt(eqLayers[i].rho_max, 3)}{eqLayers[i].rho_at_bound ? " *" : ""}</TableCell>
+                              <TableCell className="tabular-nums">{fmt(eqLayers[i].top_min, 3)} – {fmt(eqLayers[i].top_max, 3)}</TableCell>
+                            </>)}
                           </TableRow>
                         ))}
                       </TableBody>
                     </Table>
+                    {eq && (
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        {eqLayers
+                          ? `Ranges: ${eq.n_accepted} of ${eq.n_samples} sampled models fit as well as the best one (95 % region, up to ${fmt(eq.misfit_limit_rms_percent, 3)} % RMS). They are spans of equivalent models, not probability intervals; * = reaches the resistivity limit, i.e. not constrained by the data.`
+                          : `Equivalent models: ${eq.note ?? "not computed."}`}
+                      </p>
+                    )}
                     <Button className="mt-3" size="sm" onClick={() => setTab("interpretation")}>Interpret layers →</Button>
                   </CardContent>
                 </Card>

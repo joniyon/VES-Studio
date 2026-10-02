@@ -37,6 +37,8 @@ export type LithologyResponse = { lithologies: Lithology[]; confidence_levels: s
 export type Suggestion = { id: string; name: string; in_range: boolean; depth_ok: boolean; score: number; basis: string };
 export type LayerInterp = { lithology: string; confidence: string; basis: string; notes: string };
 
+export type EquivalenceLayer = { rho_min: number; rho_max: number; thickness_min: number | null; thickness_max: number | null; top_min: number; top_max: number; rho_at_bound: boolean };
+export type Equivalence = { constrained?: boolean; note?: string; n_accepted?: number; n_samples?: number; n_points?: number; n_params?: number; misfit_limit_rms_percent?: number; layers?: EquivalenceLayer[] };
 export type WorkingConfig = { overlap: "none" | "average" | "shift"; anchor_segment: number; smooth: "none" | "median" | "hanning"; window: 3 | 5 };
 export const NO_WORKING: WorkingConfig = { overlap: "none", anchor_segment: 0, smooth: "none", window: 3 };
 export type WorkingPreview = {
@@ -56,6 +58,7 @@ export type InversionResult = {
   model_response: number[];
   rms_percent: number;
   rms_raw_percent: number | null;
+  equivalence?: Equivalence;
   raw_spacing: number[];
   raw_observed: number[];
   working: { description?: string; shifts?: number[]; notes?: string[]; n_segments?: number };

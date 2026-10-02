@@ -36,6 +36,10 @@ export function usePlotTheme() {
     : { fg: "#262626", grid: "#e5e5e5", muted: "#737373", series: ["#2563eb", "#d97706", "#dc2626", "#059669"] };
 }
 
+/** Plotly's default log-axis labels collapse 20/50/200... to a bare "2"/"5"; label 1-2-5 ticks in full instead. */
+const LOG_TICKS = { dtick: "D2", tickformat: ",.4~g" } as const;
+const withLogTicks = (ax: Partial<Layout["xaxis"]> | undefined) => (ax?.type === "log" ? { ...LOG_TICKS, ...ax } : ax);
+
 type Props = {
   data: Partial<Data>[];
   layout: Partial<Layout>;
@@ -56,8 +60,8 @@ export function BasePlot({ data, layout, onPointClick }: Props) {
     legend: { orientation: "h", y: -0.32, font: { color: t.fg } },
     hoverlabel: { font: { family: "var(--font-geist-mono), monospace" } },
     ...layout,
-    xaxis: { ...axis, ...layout.xaxis, title: { text: layout.xaxis?.title as string, font: { color: t.fg } } },
-    yaxis: { ...axis, ...layout.yaxis, title: { text: layout.yaxis?.title as string, font: { color: t.fg } } },
+    xaxis: { ...axis, ...withLogTicks(layout.xaxis), title: { text: layout.xaxis?.title as string, font: { color: t.fg } } },
+    yaxis: { ...axis, ...withLogTicks(layout.yaxis), title: { text: layout.yaxis?.title as string, font: { color: t.fg } } },
   };
   return (
     <Plot

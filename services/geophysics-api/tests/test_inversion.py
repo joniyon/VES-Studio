@@ -232,3 +232,21 @@ def test_multistart_never_worse_than_single_start_and_splits_convergence_from_fi
     assert one.metadata["starts_tried"] == 1 and many.metadata["starts_tried"] == 6 * 2
     assert many.fit_within_error == (many.chi2 <= 1.0)       # 8 % noise vs 3 % assumed error: cannot be met
     assert not many.fit_within_error and many.converged
+
+
+def test_equivalence_ranges_contain_best_and_true_model_and_flag_unconstrained_cases(clean):
+    r = invert_station(clean, InversionConfig(n_layers=3, error_percent=2.0, equivalence_samples=3000))
+    e = r.equivalence
+    assert e["constrained"] and e["n_accepted"] > 10 and len(e["layers"]) == 3
+    for i, L in enumerate(e["layers"]):
+        assert L["rho_min"] <= r.resistivity[i] <= L["rho_max"] and L["top_min"] <= r.depth_top[i] <= L["top_max"]
+        assert L["rho_min"] <= TRUE_RHO[i] * 1.001 and L["rho_max"] >= TRUE_RHO[i] * 0.999   # truth is equivalent
+    assert invert_station(clean, InversionConfig(n_layers=3, equivalence_samples=0)).equivalence == {}
+
+
+def test_equivalence_reports_no_ranges_when_points_do_not_exceed_parameters():
+    from app.inversion.equivalence import confidence_factor
+    assert confidence_factor(5, 3) is None and confidence_factor(6, 3) > 1
+    p = process_dataset(_segmented_sounding().iloc[:5], "schlumberger", assume_point_mn=True)
+    e = invert_station(p, InversionConfig(n_layers=3)).equivalence
+    assert e["constrained"] is False and e["layers"] == [] and "cannot constrain" in e["note"]

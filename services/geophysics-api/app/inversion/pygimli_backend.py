@@ -48,3 +48,12 @@ class PygimliBackend:
             "iterations": len(inv.chi2History) if hasattr(inv, "chi2History") else cfg.max_iter,
             "backend": {"name": self.name, "pygimli": version("pygimli")},
         }
+
+    def forward_model(self, distances: dict, n_layers: int):
+        """Callable (thickness, resistivity) -> apparent resistivity at the given configurations."""
+        import pygimli as pg
+        from pygimli.physics.ves import VESModelling
+
+        fop = VESModelling(am=pg.Vector(distances["am"]), an=pg.Vector(distances["an"]),
+                           bm=pg.Vector(distances["bm"]), bn=pg.Vector(distances["bn"]), nLayers=n_layers)
+        return lambda th, rho: np.array(fop.response(pg.Vector(list(th) + list(rho))))

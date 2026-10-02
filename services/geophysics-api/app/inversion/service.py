@@ -9,6 +9,7 @@ import pandas as pd
 from app import ENGINE_VERSION
 from app.arrays import get_array
 from app.processing import SOUNDING_ARRAYS, ProcessedDataset, WorkingCurveConfig, build_working_curve
+from .equivalence import equivalent_models
 from .forward import layered_apparent_resistivity
 from .pygimli_backend import PygimliBackend
 from .types import InversionBackend, InversionConfig, InversionResult
@@ -156,6 +157,7 @@ def invert_station(processed: ProcessedDataset, config: InversionConfig | None =
 
     _, dist = _geometry(arr, params)
     if cfg.working.is_identity:
+        d_obs, d_err = obs, np.ones(len(obs))
         raw, tried, failed = _solve(backend, spacing, dist, obs, cfg)
         resp = np.asarray(raw["response"], float)
     else:
@@ -165,6 +167,10 @@ def invert_station(processed: ProcessedDataset, config: InversionConfig | None =
         resp = np.exp(np.bincount(group, np.log(r_d)) / np.bincount(group))
     rho = np.clip(np.asarray(raw["resistivity"], float), *cfg.rho_bounds)
     th = np.asarray(raw["thickness"], float)
+    equivalence = {}
+    if cfg.equivalence_samples > 0:
+        equivalence = equivalent_models(backend.forward_model(dist, cfg.n_layers), d_obs, d_err, th, rho, cfg,
+                                        n_eff=len(obs), n_samples=cfg.equivalence_samples)
     rel = (obs - resp) / obs
     rms = float(np.sqrt(np.mean(rel**2)) * 100)
     chi2 = float(np.mean((rel / (cfg.error_percent / 100.0)) ** 2))
@@ -188,6 +194,7 @@ def invert_station(processed: ProcessedDataset, config: InversionConfig | None =
                   "lam_used": float(raw["lam"]), "starts_tried": tried, "starts_failed": failed,
                   "n_data": int(len(obs)), "n_raw": int(len(raw_obs)), "rows_used": [int(r) for r in rows_used]},
         raw_spacing=raw_spacing, raw_observed=raw_obs, rms_raw_percent=rms_raw, working=working_info,
+        equivalence=equivalence,
     )
 
 

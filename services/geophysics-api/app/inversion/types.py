@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -14,6 +15,8 @@ class InversionConfig:
     lam: float = 10.0                     # regularisation strength
     max_iter: int = 30
     n_starts: int = 6                     # starting models tried (1 = single start from the default/user model)
+    equivalence_samples: int = field(                      # models sampled for the equivalence analysis (0 = skip)
+        default_factory=lambda: int(os.environ.get("VES_EQUIVALENCE_SAMPLES", 3000)))
     lam_ratios: tuple[float, ...] = (1.0, 0.1)   # regularisation strengths tried, as multiples of `lam`
     rho_bounds: tuple[float, float] = (0.1, 1e5)      # ohm-m
     thickness_bounds: tuple[float, float] = (0.1, 1e3)  # m
@@ -46,8 +49,10 @@ class InversionResult:
     raw_spacing: np.ndarray = field(default_factory=lambda: np.array([]))    # usable raw points
     raw_observed: np.ndarray = field(default_factory=lambda: np.array([]))
     rms_raw_percent: float | None = None     # misfit of the model against the RAW data
+    equivalence: dict = field(default_factory=dict)   # range of models that fit as well as the best (empty if skipped)
     working: dict = field(default_factory=dict)   # shifts, segments, description (empty when raw data were fitted)
 
 
 class InversionBackend(Protocol):
     def invert(self, spacing, distances: dict, observed, config: InversionConfig, error_scale=None) -> dict: ...
+    def forward_model(self, distances: dict, n_layers: int): ...

@@ -76,6 +76,23 @@ def draft_summary(processed, result, interp) -> str:
             f"comprises: " + "; ".join(parts) + ". Interpretations are tentative and depend on local geological context.")
 
 
+def _equivalence_block(result):
+    eq = result.equivalence or {}
+    if not eq:
+        return []
+    if not eq.get("constrained"):
+        return [Spacer(1, 4), _p("Equivalent models: " + eq.get("note", "not computed."))]
+    rows = [[i + 1, f"{L['rho_min']:.3g} – {L['rho_max']:.3g}" + (" *" if L["rho_at_bound"] else ""),
+             f"{L['top_min']:.3g} – {L['top_max']:.3g}"] for i, L in enumerate(eq["layers"])]
+    return [Spacer(1, 4),
+            _p(f"Equivalent models. {eq['n_accepted']} of {eq['n_samples']} sampled models fit the data as well as the best one "
+               f"(95 % confidence region; misfit up to {eq['misfit_limit_rms_percent']:.3g} % RMS, {eq['n_points']} points, "
+               f"{eq['n_params']} parameters). The ranges below are the span of those models, not probability intervals; "
+               "* marks a range reaching the allowed resistivity limits (the data do not constrain that layer)."),
+            Spacer(1, 2),
+            _grid(["Layer", "ρ range (Ωm)", "Depth to top (m)"], rows, [20 * mm, 60 * mm, 60 * mm])]
+
+
 def build_report(*, project: dict, station: dict, processed, result, interpretation: list[dict],
                  geological_context: str = "", conclusion: str = "", upload: dict | None = None) -> bytes:
     arr = get_array(processed.lineage["array"])
@@ -137,6 +154,7 @@ def build_report(*, project: dict, station: dict, processed, result, interpretat
                 [[i + 1, f"{result.resistivity[i]:.4g}", f"{result.thickness[i]:.4g}" if i < len(result.thickness) else "half-space",
                   f"{result.depth_top[i]:.4g}", "∞" if result.depth_bottom[i] in (None, float('inf')) else f"{result.depth_bottom[i]:.4g}"]
                  for i in range(len(result.resistivity))], [20 * mm, 30 * mm, 40 * mm, 35 * mm, 35 * mm]),
+          *_equivalence_block(result),
           Spacer(1, 4),
           _kv([("RMS misfit (fitted curve)", f"{result.rms_percent:.3g} %"),
                ("RMS misfit (raw data)", f"{result.rms_raw_percent:.3g} %" if result.rms_raw_percent is not None else ""),

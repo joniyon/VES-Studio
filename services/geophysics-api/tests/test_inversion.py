@@ -217,3 +217,18 @@ def test_merged_overlaps_are_evaluated_at_each_raw_mn_not_an_averaged_mn():
     assert sorted(set(np.round(half_mn, 3))) == [0.25, 0.5, 1.0, 2.5]   # no 0.375 / 0.75 / 1.75 averages
     assert np.isclose(seen["err"], [1, 1, 1, 2**.5, 2**.5, 1, 2**.5, 2**.5, 1, 2**.5, 2**.5, 1]).all()
     assert len(r.model_response) == len(r.observed) == 9
+
+
+def test_multistart_never_worse_than_single_start_and_splits_convergence_from_fit_quality():
+    """Noisy field-like sounding: the best of several starts/regularisations beats (or ties) one start, and
+    'optimiser finished' is reported separately from 'fit within the assumed error'."""
+    rng = np.random.default_rng(3)
+    df = _segmented_sounding(offsets=(1.0,) * 6)
+    df["apparent_resistivity"] *= np.exp(rng.normal(0, 0.08, len(df)))
+    p = process_dataset(df, "schlumberger", assume_point_mn=True)
+    one = invert_station(p, InversionConfig(n_layers=4, n_starts=1))
+    many = invert_station(p, InversionConfig(n_layers=4))
+    assert many.rms_percent <= one.rms_percent + 1e-9
+    assert one.metadata["starts_tried"] == 1 and many.metadata["starts_tried"] == 6 * 2
+    assert many.fit_within_error == (many.chi2 <= 1.0)       # 8 % noise vs 3 % assumed error: cannot be met
+    assert not many.fit_within_error and many.converged

@@ -18,6 +18,43 @@ class InversionError(ValueError):
     pass
 
 
+def _random_starts(spacing, obs, cfg: InversionConfig, n: int):
+    """Deterministic (fixed seed) random starting models: log-uniform interface depths and resistivities."""
+    rng = np.random.default_rng(0)
+    lo_d, hi_d = spacing.min() / 2, spacing.max() / 2
+    lo_r, hi_r = obs.min() / 2, obs.max() * 3
+    for _ in range(n):
+        depth = np.sort(np.exp(rng.uniform(np.log(lo_d), np.log(hi_d), cfg.n_layers - 1)))
+        rho = np.clip(np.exp(rng.uniform(np.log(lo_r), np.log(hi_r), cfg.n_layers)), *cfg.rho_bounds)
+        yield tuple(rho), tuple(np.maximum(np.diff(np.r_[0.0, depth]), cfg.thickness_bounds[0]))
+
+
+def _solve(backend, spacing, dist, obs, cfg: InversionConfig, error_scale=None):
+    """Best of several starting models x regularisation strengths (lowest weighted misfit).
+    Returns (raw backend result, number of runs tried, number that failed)."""
+    from dataclasses import replace
+    w = np.ones(len(obs)) if error_scale is None else np.asarray(error_scale, float)
+    starts = [(cfg.start_rho, cfg.start_thickness)] + list(_random_starts(spacing, obs, cfg, cfg.n_starts - 1))
+    lams = [cfg.lam * r for r in cfg.lam_ratios] if cfg.n_starts > 1 else [cfg.lam]
+    best, best_score, tried, failed = None, np.inf, 0, 0
+    for lam in lams:
+        for rho0, th0 in starts:
+            tried += 1
+            try:
+                raw = backend.invert(spacing, dist, obs, replace(cfg, lam=lam, start_rho=rho0, start_thickness=th0),
+                                     error_scale=error_scale)
+                resp = np.asarray(raw["response"], float)
+                score = float(np.sqrt(np.mean(((obs - resp) / obs / w) ** 2)))
+            except Exception:
+                failed += 1
+                continue
+            if np.isfinite(score) and score < best_score:
+                best, best_score = {**raw, "lam": lam}, score
+    if best is None:
+        raise InversionError("The inversion failed for every starting model; check the data and settings.")
+    return best, tried, failed
+
+
 def _run_id(dist, observed, cfg, array) -> str:
     h = hashlib.sha256()
     h.update(json.dumps({"cfg": asdict(cfg), "array": array, "engine": ENGINE_VERSION},
@@ -119,10 +156,10 @@ def invert_station(processed: ProcessedDataset, config: InversionConfig | None =
 
     _, dist = _geometry(arr, params)
     if cfg.working.is_identity:
-        raw = backend.invert(spacing, dist, obs, cfg)
+        raw, tried, failed = _solve(backend, spacing, dist, obs, cfg)
         resp = np.asarray(raw["response"], float)
     else:
-        raw = backend.invert(raw_spacing[idx], dist, d_obs, cfg, error_scale=d_err)
+        raw, tried, failed = _solve(backend, raw_spacing[idx], dist, d_obs, cfg, error_scale=d_err)
         r_d = np.asarray(raw["response"], float)
         # response per working point = geometric mean over the raw configurations behind it
         resp = np.exp(np.bincount(group, np.log(r_d)) / np.bincount(group))
@@ -145,9 +182,10 @@ def invert_station(processed: ProcessedDataset, config: InversionConfig | None =
         run_id=_run_id(dist, obs, cfg, array), config=cfg, resistivity=rho, thickness=th, depth_top=tops,
         depth_bottom=bottoms, spacing=spacing, observed=obs, model_response=resp,
         rms_percent=rms, chi2=chi2, iterations=int(raw["iterations"]),
-        converged=chi2 <= 1.0,
+        converged=int(raw["iterations"]) < cfg.max_iter, fit_within_error=chi2 <= 1.0,
         warnings=_warnings(array, cfg.working, rms, rms_raw),
         metadata={"engine_version": ENGINE_VERSION, "array": array, **raw["backend"],
+                  "lam_used": float(raw["lam"]), "starts_tried": tried, "starts_failed": failed,
                   "n_data": int(len(obs)), "n_raw": int(len(raw_obs)), "rows_used": [int(r) for r in rows_used]},
         raw_spacing=raw_spacing, raw_observed=raw_obs, rms_raw_percent=rms_raw, working=working_info,
     )

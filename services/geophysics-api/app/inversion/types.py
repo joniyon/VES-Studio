@@ -13,6 +13,8 @@ class InversionConfig:
     error_percent: float = 3.0            # assumed relative data error
     lam: float = 10.0                     # regularisation strength
     max_iter: int = 30
+    n_starts: int = 6                     # starting models tried (1 = single start from the default/user model)
+    lam_ratios: tuple[float, ...] = (1.0, 0.1)   # regularisation strengths tried, as multiples of `lam`
     rho_bounds: tuple[float, float] = (0.1, 1e5)      # ohm-m
     thickness_bounds: tuple[float, float] = (0.1, 1e3)  # m
     start_rho: tuple[float, ...] | None = None        # length n_layers, else data median
@@ -34,7 +36,8 @@ class InversionResult:
     rms_percent: float                # sqrt(mean(((obs-model)/obs)^2)) * 100
     chi2: float                       # error-weighted misfit; ~1 when fit matches assumed error
     iterations: int
-    converged: bool                   # chi2 <= 1 reached within max_iter
+    converged: bool                   # the optimiser finished (stopped before max_iter) for the reported run
+    fit_within_error: bool = False    # chi2 <= 1: the data are fitted to within the assumed error
     metadata: dict = field(default_factory=dict)
     warnings: tuple[str, ...] = (
         "A good fit does not prove the geological model: VES inversion is non-unique "

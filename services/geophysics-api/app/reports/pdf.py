@@ -141,7 +141,9 @@ def build_report(*, project: dict, station: dict, processed, result, interpretat
           _kv([("RMS misfit (fitted curve)", f"{result.rms_percent:.3g} %"),
                ("RMS misfit (raw data)", f"{result.rms_raw_percent:.3g} %" if result.rms_raw_percent is not None else ""),
                ("χ²", f"{result.chi2:.3g}"), ("Iterations", result.iterations),
-               ("Converged (χ² ≤ 1)", "yes" if result.converged else "no")])]
+               ("Optimiser finished", "yes" if result.converged else "no (iteration limit reached)"),
+               ("Fit within assumed error (χ² ≤ 1)", "yes" if result.fit_within_error else "no"),
+               ("Starting models tried", f"{result.metadata.get('starts_tried', 1)} (best at regularisation {result.metadata.get('lam_used', result.config.lam):.3g})")])]
 
     interp = interpretation or []
     used = [get_lithology((interp[i] if i < len(interp) else {}).get("lithology") or "unclassified").id for i in range(len(result.resistivity))]

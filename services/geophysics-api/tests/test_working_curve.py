@@ -60,10 +60,10 @@ def test_hanning_smooths_and_preserves_monotone_trend():
     np.testing.assert_allclose(wc.values[2:-2], v[2:-2], rtol=1e-9)
 
 
-def test_mn_is_averaged_in_merged_groups():
-    sp = np.array([1.0, 2.0, 2.0, 3.0]); mn = np.array([0.1, 0.1, 0.3, 0.3])
-    wc = build_working_curve(sp, [1, 2, 2, 3], mn, cfg=WorkingCurveConfig(overlap="average"))
-    assert wc.mn.tolist() == pytest.approx([0.1, 0.2, 0.3])
+def test_merged_groups_keep_their_raw_rows_and_carry_no_averaged_mn():
+    sp = np.array([1.0, 2.0, 2.0, 3.0])
+    wc = build_working_curve(sp, [1, 2, 2, 3], cfg=WorkingCurveConfig(overlap="average"))
+    assert wc.source_rows == [[0], [1, 2], [3]] and not hasattr(wc, "mn")
 
 
 def test_errors_and_validation():

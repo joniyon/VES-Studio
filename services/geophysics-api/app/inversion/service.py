@@ -111,9 +111,8 @@ def prepare_working_curve(processed: ProcessedDataset, working: WorkingCurveConf
                              "soundings only.")
     params = _raw_params(arr, use)
     spacing = np.asarray(arr.spacing(**params), float)
-    mn = params.get("mn_half")
-    return arr, use, spacing, mn, build_working_curve(spacing, use.apparent_resistivity.to_numpy(float), mn,
-                                                      use.source_row.to_numpy(int), working)
+    return arr, use, spacing, params.get("mn_half"), build_working_curve(
+        spacing, use.apparent_resistivity.to_numpy(float), use.source_row.to_numpy(int), working)
 
 
 def invert_station(processed: ProcessedDataset, config: InversionConfig | None = None,

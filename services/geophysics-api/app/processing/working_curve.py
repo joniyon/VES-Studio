@@ -60,7 +60,6 @@ class WorkingCurveConfig:
 class WorkingCurve:
     spacing: np.ndarray
     values: np.ndarray
-    mn: np.ndarray | None
     source_rows: list[list[int]]          # raw row indices behind each working point
     segments: np.ndarray                   # segment id of each raw point (input order)
     shifts: list[float]                    # multiplicative factor per segment (1.0 = unshifted)
@@ -94,15 +93,15 @@ def _smooth(logv: np.ndarray, mode: str, window: int) -> np.ndarray:
     return out
 
 
-def build_working_curve(spacing, values, mn=None, rows=None, cfg: WorkingCurveConfig | None = None) -> WorkingCurve:
-    """spacing/values (and optional mn) in measurement order; `rows` = raw row ids for lineage."""
+def build_working_curve(spacing, values, rows=None, cfg: WorkingCurveConfig | None = None) -> WorkingCurve:
+    """spacing/values in measurement order; `rows` = raw row ids for lineage. MN/2 is deliberately not carried:
+    the inversion evaluates each working point at the real MN/2 of the raw rows behind it (`source_rows`)."""
     cfg = cfg or WorkingCurveConfig()
     sp = np.asarray(spacing, float)
     v = np.asarray(values, float)
     if np.any(v <= 0) or np.any(~np.isfinite(v)):
         raise ValueError("Working curve needs positive, finite apparent resistivities.")
     n = len(sp)
-    mn_a = None if mn is None else np.asarray(mn, float)
     rows_a = list(range(n)) if rows is None else list(map(int, rows))
     notes: list[str] = []
 
@@ -138,21 +137,18 @@ def build_working_curve(spacing, values, mn=None, rows=None, cfg: WorkingCurveCo
     # merge repeated spacings (average / shift modes)
     if cfg.overlap in ("average", "shift"):
         uniq = np.unique(sp)
-        w_sp, w_log, w_mn, w_rows = [], [], [], []
+        w_sp, w_log, w_rows = [], [], []
         for x in uniq:
             idx = np.flatnonzero(sp == x)
             w_sp.append(x)
             w_log.append(float(np.mean(logv[idx])))
-            w_mn.append(None if mn_a is None else float(np.mean(mn_a[idx])))
             w_rows.append([rows_a[i] for i in idx])
         w_sp, w_log = np.array(w_sp), np.array(w_log)
-        w_mn_a = None if mn_a is None else np.array(w_mn)
     else:
         order = np.argsort(sp, kind="stable")
         w_sp, w_log = sp[order], logv[order]
-        w_mn_a = None if mn_a is None else mn_a[order]
         w_rows = [[rows_a[i]] for i in order]
 
     w_log = _smooth(w_log, cfg.smooth, cfg.window)
-    return WorkingCurve(spacing=w_sp, values=np.exp(w_log), mn=w_mn_a, source_rows=w_rows,
+    return WorkingCurve(spacing=w_sp, values=np.exp(w_log), source_rows=w_rows,
                         segments=seg, shifts=shifts, notes=notes)

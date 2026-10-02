@@ -62,6 +62,7 @@ export type InversionResult = {
   chi2: number;
   iterations: number;
   converged: boolean;
+  fit_within_error: boolean;
   metadata: Record<string, unknown>;
   warnings: string[];
   error?: string;

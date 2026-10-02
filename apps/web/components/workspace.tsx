@@ -767,7 +767,9 @@ export function Workspace() {
                       <dt className="text-muted-foreground">Points fitted</dt><dd className="text-right tabular-nums">{String(r0.metadata.n_data)} of {String(r0.metadata.n_raw)}</dd>
                       <dt className="text-muted-foreground">χ²</dt><dd className="text-right tabular-nums">{fmt(r0.chi2, 3)}</dd>
                       <dt className="text-muted-foreground">Iterations</dt><dd className="text-right tabular-nums">{r0.iterations}</dd>
-                      <dt className="text-muted-foreground">Converged</dt><dd className="text-right">{r0.converged ? "yes (χ² ≤ 1)" : "no (χ² > 1)"}</dd>
+                      <dt className="text-muted-foreground">Optimiser finished</dt><dd className="text-right">{r0.converged ? "yes" : "no (iteration limit)"}</dd>
+                      <dt className="text-muted-foreground">Fit within assumed error</dt><dd className="text-right">{r0.fit_within_error ? "yes (χ² ≤ 1)" : "no (χ² > 1)"}</dd>
+                      <dt className="text-muted-foreground">Starts tried</dt><dd className="text-right tabular-nums">{String(r0.metadata.starts_tried)} (λ {fmt(Number(r0.metadata.lam_used), 3)})</dd>
                       <dt className="text-muted-foreground">Run ID</dt><dd className="text-right">{r0.run_id}</dd>
                       <dt className="text-muted-foreground">Engine</dt><dd className="text-right">v{String(r0.metadata.engine_version)}</dd>
                       <dt className="text-muted-foreground">pyGIMLi</dt><dd className="text-right">{String(r0.metadata.pygimli)}</dd>

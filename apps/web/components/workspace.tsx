@@ -23,7 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TabsContent } from "@/components/ui/tabs";
 import { CurveChart } from "./curve-chart";
 import { ExportPanel, type ExportAction } from "./export-panel";
 import { BLANK, InterpretationPanel } from "./interpretation-panel";
@@ -31,7 +31,9 @@ import { LayerProfile } from "./layer-profile";
 import { Pick } from "./pick";
 import { WorkingCurveCard } from "./working-curve-card";
 import { ProjectPanel } from "./project-panel";
-import { ThemeToggle } from "./theme-toggle";
+import { AppShell } from "./shell/AppShell";
+import { isDone, type StepId } from "./shell/steps";
+import { ToastProvider, useToast } from "./shell/ToastHost";
 
 const fmt = (v: unknown, d = 4) =>
   typeof v === "number" ? (Math.abs(v) >= 1e4 || (v !== 0 && Math.abs(v) < 1e-2) ? v.toExponential(3) : Number(v.toPrecision(d)).toString()) : "—";
@@ -55,7 +57,9 @@ function StatusBadge({ s }: { s: string }) {
   return <Badge variant={s === "ERROR" ? "destructive" : s === "WARNING" ? "secondary" : "outline"}>{s}</Badge>;
 }
 
-export function Workspace() {
+/** Workspace state and tab contents; rendered inside the layout shell (see ./shell). */
+function WorkspaceInner() {
+  const toast = useToast();
   const [meta, setMeta] = useState<ArraysResponse | null>(null);
   const [litMeta, setLitMeta] = useState<LithologyResponse | null>(null);
   const [apiError, setApiError] = useState<string | null>(null);
@@ -92,9 +96,10 @@ export function Workspace() {
   const [selected, setSelected] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [exportMsg, setExportMsg] = useState<string | null>(null);
   const [tab, setTab] = useState("project");
+  const [visited, setVisited] = useState<ReadonlySet<StepId>>(() => new Set<StepId>(["project"]));
+  if (!visited.has(tab as StepId)) setVisited(new Set(visited).add(tab as StepId));
+  const [savedAt, setSavedAt] = useState<number | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   const log = useCallback((text: string) => setHistory((h) => [...h, { t: now(), text }]), []);
@@ -140,7 +145,7 @@ export function Workspace() {
 
   // ------------------------------------------------------------------ data loading
   const resetResults = useCallback(() => {
-    setProcessed(null); setRuns([]); setActiveRun(null); setSelected(null); setNotice(null);
+    setProcessed(null); setRuns([]); setActiveRun(null); setSelected(null);
     setSugState(null); setColumnUrl(null);
   }, [setRuns]);
 
@@ -219,7 +224,7 @@ export function Workspace() {
     setExcluded(next);
     log(`${next.includes(row) ? "Excluded" : "Re-included"} row ${row}`);
     await runProcess(next, true);
-    if (runs.length) setNotice("Exclusions changed. Earlier inversion runs are kept; run the inversion again to use the new selection.");
+    if (runs.length) toast({ text: "Exclusions changed. Earlier inversion runs are kept; run the inversion again to use the new selection." });
   };
 
   const runInvert = async () => {
@@ -233,12 +238,11 @@ export function Workspace() {
       const existing = cur.findIndex((r) => r.result.run_id === res.run_id);
       if (existing >= 0) {
         setActiveRun(existing);
-        setNotice(`Same data and settings as Run ${existing + 1} — the result is identical (reproducible).`);
+        toast({ text: `Same data and settings as Run ${existing + 1} — the result is identical (reproducible).` });
       } else {
         const next = [...cur, { result: res, excluded: [...excluded] }];
         setRuns(next);
         setActiveRun(next.length - 1);
-        setNotice(null);
         log(`Inversion run ${next.length}: ${res.config.n_layers} layers, error ${res.config.error_percent}%, ${res.working.description ? `prepared (${res.working.description}), ` : "raw data, "}RMS ${res.rms_percent.toFixed(2)}%${res.rms_raw_percent != null && res.working.description ? ` (raw ${res.rms_raw_percent.toFixed(1)}%)` : ""}, run ${res.run_id}`);
       }
     } catch (e) { setError((e as Error).message); }
@@ -326,10 +330,10 @@ export function Workspace() {
       for (const r of s.runs) restored.push({ result: await invert({ ...base, excluded_rows: r.excluded, config: r.config }), excluded: r.excluded });
       setRuns(restored);
       setActiveRun(s.activeRun != null && s.activeRun < restored.length ? s.activeRun : restored.length ? restored.length - 1 : null);
-      setNotice(from === "file" ? "Project file opened; results were recomputed from the saved data." : "Restored your last session; results were recomputed from the saved data.");
+      toast({ text: from === "file" ? "Project file opened; results were recomputed from the saved data." : "Restored your last session; results were recomputed from the saved data." });
       setTab(restored.length ? "inversion" : "data");
     } catch (e) { setError((e as Error).message); }
-  }, [setRuns, resetResults]);
+  }, [setRuns, resetResults, toast]);
 
   useEffect(() => {
     // Deferred so restoring state is not a synchronous setState inside the effect.
@@ -343,7 +347,7 @@ export function Workspace() {
 
   useEffect(() => {
     if (!hydrated) return;
-    const t = setTimeout(() => save(snapshot()), 500);
+    const t = setTimeout(() => { save(snapshot()); setSavedAt(Date.now()); }, 500);
     return () => clearTimeout(t);
   }, [hydrated, snapshot]);
 
@@ -362,8 +366,8 @@ export function Workspace() {
   // ------------------------------------------------------------------ exports
   const base = `${slug(project.name || "ves")}_${slug(station.id)}`;
   const doExport = async (key: string, fn: () => Promise<void>) => {
-    setBusy(key); setExportMsg(null); setError(null);
-    try { await fn(); setExportMsg(`Saved ${key.includes(":") ? key.split(":")[1] : key}.`); log(`Exported ${key}`); }
+    setBusy(key); setError(null);
+    try { await fn(); toast({ text: `Saved ${key.includes(":") ? key.split(":")[1] : key}.` }); log(`Exported ${key}`); }
     catch (e) { setError((e as Error).message); }
     finally { setBusy(null); }
   };
@@ -412,42 +416,33 @@ export function Workspace() {
       </Button>
     );
 
+  const done = Object.fromEntries((["project", "data", "qc", "curve", "inversion", "interpretation", "export"] as StepId[]).map((id) => [id, isDone(id, {
+    projectNamed: project.name.trim().length > 0, processed: !!processed, hasRun: !!run, visited,
+    interpreted: interp.some((it) => it.lithology !== BLANK.lithology || it.confidence !== BLANK.confidence || it.basis !== "" || it.notes !== ""),
+    exported: history.some((h) => h.text.startsWith("Exported")),
+  })])) as Record<StepId, boolean>;
+
   return (
-    <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 px-4 py-6">
-      <header className="flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">VES Studio</h1>
-          <p className="text-sm text-muted-foreground">
-            {project.name ? `${project.name} · ` : ""}Upload → array → map → validate → curve → invert → interpret → report
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {meta && <Badge variant="outline">API connected</Badge>}
-          <ThemeToggle />
-        </div>
-      </header>
-
-      {apiError && (
-        <Alert variant="destructive"><XCircle /><AlertTitle>Geophysics API unavailable</AlertTitle><AlertDescription>{apiError}</AlertDescription></Alert>
-      )}
-      {error && (
-        <Alert variant="destructive"><XCircle /><AlertTitle>Something went wrong</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>
-      )}
-      {notice && tab !== "inversion" && (
-        <Alert><Info /><AlertDescription>{notice}</AlertDescription></Alert>
-      )}
-
-      <Tabs value={tab} onValueChange={(v) => setTab(String(v))}>
-        <TabsList className="flex-wrap">
-          <TabsTrigger value="project">0 · Project</TabsTrigger>
-          <TabsTrigger value="data">1 · Data</TabsTrigger>
-          <TabsTrigger value="qc" disabled={!processed}>2 · QC</TabsTrigger>
-          <TabsTrigger value="curve" disabled={!processed}>3 · Curve</TabsTrigger>
-          <TabsTrigger value="inversion" disabled={!processed}>4 · Inversion</TabsTrigger>
-          <TabsTrigger value="interpretation" disabled={!run}>5 · Interpretation</TabsTrigger>
-          <TabsTrigger value="export" disabled={!processed}>6 · Report & export</TabsTrigger>
-        </TabsList>
-
+    <AppShell
+      tab={tab} onTab={setTab} flags={{ processed: !!processed, hasRun: !!run }} done={done}
+      projectName={project.name} stationId={station.id} runLabel={run && activeRun != null ? `Run ${activeRun + 1}` : null}
+      savedAt={savedAt} issues={issues}
+      status={{
+        api: meta ? "connected" : apiError ? "unavailable" : "checking",
+        engine: String(processed?.lineage.engine_version ?? run?.result.metadata.engine_version ?? "") || undefined,
+        array: arr?.title, station: station.id,
+        points: processed ? `${rows.length} rows${excluded.length ? ` · ${excluded.length} excluded` : ""}` : undefined,
+        run: r0 && activeRun != null ? `Run ${activeRun + 1} · ${r0.run_id} · RMS ${fmt(r0.rms_percent, 3)} %` : undefined,
+      }}
+      banners={<>
+        {apiError && (
+          <Alert variant="destructive"><XCircle /><AlertTitle>Geophysics API unavailable</AlertTitle><AlertDescription>{apiError}</AlertDescription></Alert>
+        )}
+        {error && (
+          <Alert variant="destructive"><XCircle /><AlertTitle>Something went wrong</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>
+        )}
+      </>}
+    >
         {/* ---------------- 0 · PROJECT ---------------- */}
         <TabsContent value="project" className="mt-4">
           <ProjectPanel project={project} station={station} errors={stationErrors} history={history}
@@ -710,7 +705,6 @@ export function Workspace() {
             </CardContent>
           </Card>
 
-          {notice && <Alert><Info /><AlertDescription>{notice}</AlertDescription></Alert>}
           {runs.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {runs.map((r, i) => (
@@ -806,9 +800,16 @@ export function Workspace() {
 
         {/* ---------------- 6 · EXPORT ---------------- */}
         <TabsContent value="export" className="mt-4">
-          <ExportPanel actions={actions} hasRun={!!run} busy={busy} message={exportMsg} />
+          <ExportPanel actions={actions} hasRun={!!run} busy={busy} />
         </TabsContent>
-      </Tabs>
-    </div>
+    </AppShell>
+  );
+}
+
+export function Workspace() {
+  return (
+    <ToastProvider>
+      <WorkspaceInner />
+    </ToastProvider>
   );
 }

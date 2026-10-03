@@ -16,10 +16,10 @@ export function TopBar({ flags, done, projectName, savedAt }: {
       </div>
       <Stepper flags={flags} done={done} />
       <div className="flex items-center gap-3">
-        <span className="max-w-48 truncate text-xs text-muted-foreground max-md:hidden" title={projectName}>{projectName || "Untitled project"}</span>
-        <span className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground max-lg:hidden" aria-live="polite">
+        <span className="max-w-48 truncate text-xs text-muted-foreground max-xl:hidden" title={projectName}>{projectName || "Untitled project"}</span>
+        <span className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground" aria-live="polite" title={savedAt ? `Autosaved ${new Date(savedAt).toLocaleTimeString()}` : "Autosave on"}>
           <Cloud className="size-3.5" aria-hidden />
-          {savedAt ? `Autosaved ${new Date(savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : "Autosave on"}
+          <span className="max-xl:sr-only">{savedAt ? `Autosaved ${new Date(savedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}` : "Autosave on"}</span>
         </span>
         <ThemeToggle />
       </div>

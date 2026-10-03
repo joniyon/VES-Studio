@@ -12,7 +12,7 @@ const ICONS: Record<string, React.ReactNode> = {
 
 export function ExportPanel({
   actions, hasRun, busy, message,
-}: { actions: ExportAction[]; hasRun: boolean; busy: string | null; message: string | null }) {
+}: { actions: ExportAction[]; hasRun: boolean; busy: string | null; message?: string | null }) {
   return (
     <Card>
       <CardHeader>

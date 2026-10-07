@@ -1,6 +1,6 @@
 [project]
 name = "ves-geophysics-api"
-version = "0.6.3"
+version = "0.6.4"
 description = "Scientific engine for VES Studio: electrode arrays, apparent resistivity, QC"
 requires-python = ">=3.11"
 dependencies = ["numpy", "pandas", "scipy", "openpyxl", "fastapi", "uvicorn", "httpx", "python-multipart",

@@ -1,6 +1,8 @@
 """Inversion service: engine-owned abstraction over backends + immutable run history."""
 import hashlib
 import json
+import os
+import traceback
 from dataclasses import asdict
 
 import numpy as np
@@ -48,13 +50,14 @@ def _solve(backend, spacing, dist, obs, cfg: InversionConfig, error_scale=None):
                 score = float(np.sqrt(np.mean(((obs - resp) / obs / w) ** 2)))
             except Exception as e:
                 failed += 1
-                last_error = f"{type(e).__name__}: {e}"
+                where = " <- ".join(f"{os.path.basename(f.filename)}:{f.lineno} {f.name}" for f in traceback.extract_tb(e.__traceback__)[-4:][::-1])
+                last_error = f"{type(e).__name__}: {e} [{where}]"
                 continue
             if np.isfinite(score) and score < best_score:
                 best, best_score = {**raw, "lam": lam}, score
     if best is None:
         raise InversionError("The inversion failed for every starting model; check the data and settings."
-                             + (f" Last error: {last_error[:300]}" if last_error else ""))
+                             + (f" Last error: {last_error[:600]}" if last_error else ""))
     return best, tried, failed
 
 

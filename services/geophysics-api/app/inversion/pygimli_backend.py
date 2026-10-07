@@ -44,6 +44,9 @@ class PygimliBackend:
         # arbitrary geometry via the four current-potential distances (inf = remote electrode)
         fop = VESModelling(am=pg.Vector(distances["am"]), an=pg.Vector(distances["an"]),
                            bm=pg.Vector(distances["bm"]), bn=pg.Vector(distances["bn"]), nLayers=n)
+        # Compute the Jacobian in-process: pyGIMLi's multi-process variant forks workers that share memory through
+        # /dev/shm, which serverless hosts lack, and the 1D forward model is far too small to benefit.
+        fop.setMultiThreadJacobian(1)
         inv = pg.Inversion(fop=fop, verbose=False)
         inv.transData = pg.trans.TransLog()
         start = pg.Vector(list(th0) + list(rho0))

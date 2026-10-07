@@ -279,3 +279,13 @@ def test_home_falls_back_to_a_temp_dir_when_it_is_read_only(monkeypatch, tmp_pat
     monkeypatch.setenv("HOME", str(tmp_path))                 # writable home is left alone
     ensure_writable_home()
     assert os.environ["HOME"] == str(tmp_path)
+
+
+def test_backend_computes_the_jacobian_in_process(monkeypatch, clean):
+    """pyGIMLi's multi-process Jacobian needs /dev/shm (absent on serverless hosts); the backend must force one worker."""
+    from pygimli.physics.ves import VESModelling
+    calls = []
+    original = VESModelling.setMultiThreadJacobian
+    monkeypatch.setattr(VESModelling, "setMultiThreadJacobian", lambda self, n: (calls.append(n), original(self, n))[1])
+    invert_station(clean, InversionConfig(n_layers=3, n_starts=1, equivalence_samples=0))
+    assert calls and calls[-1] == 1          # the constructor sets its own count first; ours must come last

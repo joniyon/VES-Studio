@@ -1,9 +1,24 @@
 """pyGIMLi backend. Nothing outside this module may import pygimli."""
+import os
+import tempfile
 from importlib.metadata import version
 
 import numpy as np
 
 from .types import InversionConfig
+
+
+def ensure_writable_home() -> None:
+    """pyGIMLi writes config/cache files under $HOME on import. Serverless hosts (e.g. Vercel) mount the home
+    directory read-only, so fall back to a temporary directory when it is not writable."""
+    home = os.environ.get("HOME") or os.path.expanduser("~")
+    if home and os.access(home, os.W_OK):
+        return
+    tmp = tempfile.gettempdir()
+    os.environ["HOME"] = tmp
+    os.environ.setdefault("XDG_CACHE_HOME", os.path.join(tmp, ".cache"))
+    os.environ.setdefault("XDG_CONFIG_HOME", os.path.join(tmp, ".config"))
+    os.environ.setdefault("MPLCONFIGDIR", os.path.join(tmp, ".mpl"))
 
 
 def default_start(spacing, observed, cfg: InversionConfig):
@@ -20,6 +35,7 @@ class PygimliBackend:
     name = "pygimli"
 
     def invert(self, spacing, distances: dict, observed, cfg: InversionConfig, error_scale=None) -> dict:
+        ensure_writable_home()
         import pygimli as pg
         from pygimli.physics.ves import VESModelling
 
@@ -51,6 +67,7 @@ class PygimliBackend:
 
     def forward_model(self, distances: dict, n_layers: int):
         """Callable (thickness, resistivity) -> apparent resistivity at the given configurations."""
+        ensure_writable_home()
         import pygimli as pg
         from pygimli.physics.ves import VESModelling
 

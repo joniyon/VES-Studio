@@ -261,3 +261,21 @@ def test_failure_message_includes_the_last_backend_error(clean):
 
     with pytest.raises(InversionError, match="Last error: RuntimeError: native library missing"):
         invert_station(clean, InversionConfig(n_layers=3), backend=Broken())
+
+
+def test_home_falls_back_to_a_temp_dir_when_it_is_read_only(monkeypatch, tmp_path):
+    """Serverless hosts mount $HOME read-only; pyGIMLi must not be pointed at it."""
+    import os
+    from app.inversion.pygimli_backend import ensure_writable_home
+    ro = tmp_path / "ro"
+    ro.mkdir()
+    ro.chmod(0o500)
+    monkeypatch.setenv("HOME", str(ro))
+    try:
+        ensure_writable_home()
+        assert os.environ["HOME"] != str(ro) and os.access(os.environ["HOME"], os.W_OK)
+    finally:
+        ro.chmod(0o700)
+    monkeypatch.setenv("HOME", str(tmp_path))                 # writable home is left alone
+    ensure_writable_home()
+    assert os.environ["HOME"] == str(tmp_path)

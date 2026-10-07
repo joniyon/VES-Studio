@@ -4,7 +4,7 @@ version = "0.6.0"
 description = "Scientific engine for VES Studio: electrode arrays, apparent resistivity, QC"
 requires-python = ">=3.11"
 dependencies = ["numpy", "pandas", "scipy", "openpyxl", "fastapi", "uvicorn", "httpx", "python-multipart",
-                "matplotlib", "reportlab", "pillow"]
+                "matplotlib", "reportlab", "pillow", "pygimli>=1.6.1,<1.7"]
 
 [project.optional-dependencies]
 dev = ["pytest", "pypdf"]

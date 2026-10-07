@@ -250,3 +250,14 @@ def test_equivalence_reports_no_ranges_when_points_do_not_exceed_parameters():
     p = process_dataset(_segmented_sounding().iloc[:5], "schlumberger", assume_point_mn=True)
     e = invert_station(p, InversionConfig(n_layers=3)).equivalence
     assert e["constrained"] is False and e["layers"] == [] and "cannot constrain" in e["note"]
+
+
+def test_failure_message_includes_the_last_backend_error(clean):
+    class Broken:
+        def invert(self, *a, **k):
+            raise RuntimeError("native library missing")
+        def forward_model(self, *a, **k):
+            raise RuntimeError("native library missing")
+
+    with pytest.raises(InversionError, match="Last error: RuntimeError: native library missing"):
+        invert_station(clean, InversionConfig(n_layers=3), backend=Broken())

@@ -37,7 +37,7 @@ def _solve(backend, spacing, dist, obs, cfg: InversionConfig, error_scale=None):
     w = np.ones(len(obs)) if error_scale is None else np.asarray(error_scale, float)
     starts = [(cfg.start_rho, cfg.start_thickness)] + list(_random_starts(spacing, obs, cfg, cfg.n_starts - 1))
     lams = [cfg.lam * r for r in cfg.lam_ratios] if cfg.n_starts > 1 else [cfg.lam]
-    best, best_score, tried, failed = None, np.inf, 0, 0
+    best, best_score, tried, failed, last_error = None, np.inf, 0, 0, None
     for lam in lams:
         for rho0, th0 in starts:
             tried += 1
@@ -46,13 +46,15 @@ def _solve(backend, spacing, dist, obs, cfg: InversionConfig, error_scale=None):
                                      error_scale=error_scale)
                 resp = np.asarray(raw["response"], float)
                 score = float(np.sqrt(np.mean(((obs - resp) / obs / w) ** 2)))
-            except Exception:
+            except Exception as e:
                 failed += 1
+                last_error = f"{type(e).__name__}: {e}"
                 continue
             if np.isfinite(score) and score < best_score:
                 best, best_score = {**raw, "lam": lam}, score
     if best is None:
-        raise InversionError("The inversion failed for every starting model; check the data and settings.")
+        raise InversionError("The inversion failed for every starting model; check the data and settings."
+                             + (f" Last error: {last_error[:300]}" if last_error else ""))
     return best, tried, failed
 
 

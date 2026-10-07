@@ -8,3 +8,4 @@ node_modules/
 
 # private field data (not committed)
 data/
+.vercel

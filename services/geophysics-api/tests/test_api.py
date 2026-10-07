@@ -100,3 +100,20 @@ def test_mn_is_full_flag_through_api():
     rows = [{"ab_half": a, "mn_half": 1.0, "resistance": r} for a, r in [(10, 2.0), (20, 1.0), (40, 0.5)]]
     r = c.post("/process", json={"array": "schlumberger", "rows": rows, "mn_is_full": True}).json()
     assert r["lineage"]["mn_column_was_full_mn"] is True and r["rows"][0]["mn_half_m"] == 0.5
+
+
+def test_api_prefix_is_ignored_when_served_under_api_on_vercel(monkeypatch):
+    """On Vercel requests arrive as /api/...; with root_path set both /api/health and /health route correctly."""
+    import importlib
+    import app.api.main as main
+    monkeypatch.setenv("VERCEL", "1")
+    try:
+        importlib.reload(main)
+        vc = TestClient(main.app)
+        assert vc.get("/api/health").json()["status"] == "ok"
+        assert vc.get("/health").json()["status"] == "ok"
+        assert vc.get("/api/arrays").status_code == 200
+    finally:
+        monkeypatch.delenv("VERCEL")
+        importlib.reload(main)
+    assert TestClient(main.app).get("/api/health").status_code == 404      # local: no prefix, unchanged

@@ -1,6 +1,7 @@
 """Thin HTTP adapter over the engine. No science lives here."""
 import io
 import math
+import os
 from dataclasses import asdict
 
 import pandas as pd
@@ -18,7 +19,10 @@ from app.reports import (build_report, column_figure, curve_figure, draft_summar
                          processed_csv)
 from app.units import CURRENT, DISTANCE, RESISTANCE, RESISTIVITY, VOLTAGE
 
-app = FastAPI(title="VES Studio geophysics API", version=ENGINE_VERSION)
+# On Vercel the API is served under /api and the prefix reaches the app unstripped; root_path makes routing ignore it.
+# Locally there is no prefix and nothing changes (paths without the prefix still match).
+ROOT_PATH = "/api" if os.environ.get("VERCEL") else ""
+app = FastAPI(title="VES Studio geophysics API", version=ENGINE_VERSION, root_path=ROOT_PATH)
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
                    allow_methods=["*"], allow_headers=["*"])
 
